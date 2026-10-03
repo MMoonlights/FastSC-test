@@ -124,7 +124,9 @@ return function(ctx)
     local dalgonaDone = false
     local redLightGreen = true
     local redLightConnection
-    local redLightOldNamecall
+    local redLightRestore
+    local lastHitboxUpdate = 0
+    local lastVisualUpdate = 0
 
     local function liveCharacter()
         local live = workspace:FindFirstChild("Live")
@@ -176,9 +178,9 @@ return function(ctx)
     if getrawmetatable and setreadonly and getnamecallmethod and newcclosure then
         games:CreateToggle("Doll ignore", false, function(value)
             state.RedLightGod = value
-            if value and not redLightOldNamecall then
+            if value and not redLightRestore then
                 local effects = remotes:FindFirstChild("Effects")
-                if effects then
+                if effects and not redLightConnection then
                     redLightConnection = scope:Connect(effects.OnClientEvent, function(payload)
                         if type(payload) == "table" and payload.EffectName == "TrafficLight" then
                             redLightGreen = payload.GreenLight == true
@@ -187,25 +189,16 @@ return function(ctx)
                         end
                     end)
                 end
-                local meta = getrawmetatable(game)
-                redLightOldNamecall = meta.__namecall
-                setreadonly(meta, false)
-                meta.__namecall = newcclosure(function(object, ...)
-                    local method = getnamecallmethod()
+                redLightRestore = scope:HookNamecall(game, function(old, object, method, ...)
                     local args = {...}
                     if state.RedLightGod and tostring(object) == "rootCFrame" and method == "FireServer" and not redLightGreen and safeCFrame then
                         args[1] = safeCFrame
-                        return redLightOldNamecall(object, unpack(args))
+                        return old(object, unpack(args))
                     end
-                    return redLightOldNamecall(object, ...)
+                    return old(object, ...)
                 end)
-                setreadonly(meta, true)
-            elseif not value and redLightOldNamecall then
-                local meta = getrawmetatable(game)
-                setreadonly(meta, false)
-                meta.__namecall = redLightOldNamecall
-                setreadonly(meta, true)
-                redLightOldNamecall = nil
+            elseif not value then
+                if redLightRestore then redLightRestore() redLightRestore = nil end
                 if redLightConnection then redLightConnection:Disconnect() redLightConnection = nil end
             end
         end)
@@ -409,6 +402,7 @@ return function(ctx)
     end
 
     scope:Loop("runtime", 0.05, function()
+        local now = os.clock()
         local character = localPlayer.Character
         local humanoid = character and character:FindFirstChildOfClass("Humanoid")
         local root = character and character:FindFirstChild("HumanoidRootPart")
@@ -443,7 +437,8 @@ return function(ctx)
             end
         end
 
-        if state.BigHRP then
+        if state.BigHRP and now - lastHitboxUpdate >= 0.12 then
+            lastHitboxUpdate = now
             for _, player in ipairs(Players:GetPlayers()) do
                 if player ~= localPlayer and player.Character then
                     local targetRoot = player.Character:FindFirstChild("HumanoidRootPart")
@@ -545,44 +540,47 @@ return function(ctx)
             if workspace:FindFirstChild("Dalgona") then completeDalgona() end
         end
 
-        local hns = workspace:FindFirstChild("HideAndSeekMap")
-        if hns and live then
-            for _, player in ipairs(Players:GetPlayers()) do
-                if player ~= localPlayer and player.Character and live:FindFirstChild(player.Name) then
-                    local kind
-                    if state.ShowHiders and player:GetAttribute("IsHider") then kind = "Hider" end
-                    if state.ShowHunters and player:GetAttribute("IsHunter") then kind = "Hunter" end
-                    if kind then tagCharacter(player.Character, player, kind) else clearTag(player.Character) end
-                end
-            end
-        else
-            for character2 in pairs(hnsObjects) do clearTag(character2) end
-        end
-
-        if live then
-            for _, model in ipairs(live:GetChildren()) do
-                if model:IsA("Model") and not Players:GetPlayerFromCharacter(model) and model ~= character then
-                    local head = model:FindFirstChild("Head")
-                    local targetRoot = model:FindFirstChild("HumanoidRootPart")
-                    if state.RebelESP and head then
-                        head.Size = Vector3.new(9.6, 9.6, 9.6)
-                        local highlight = rebelObjects[model]
-                        if not highlight or not highlight.Parent then
-                            highlight = Instance.new("Highlight")
-                            highlight.Name = "FastSC_Rebel"
-                            highlight.Adornee = model
-                            highlight.FillColor = Color3.fromRGB(255, 0, 0)
-                            highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-                            highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                            highlight.Parent = model
-                            rebelObjects[model] = highlight
-                        end
-                    else
-                        if head then scope:Restore(head, "Size") end
-                        clearRebel(model)
+        if now - lastVisualUpdate >= 0.2 then
+            lastVisualUpdate = now
+            local hns = workspace:FindFirstChild("HideAndSeekMap")
+            if hns and live then
+                for _, player in ipairs(Players:GetPlayers()) do
+                    if player ~= localPlayer and player.Character and live:FindFirstChild(player.Name) then
+                        local kind
+                        if state.ShowHiders and player:GetAttribute("IsHider") then kind = "Hider" end
+                        if state.ShowHunters and player:GetAttribute("IsHunter") then kind = "Hunter" end
+                        if kind then tagCharacter(player.Character, player, kind) else clearTag(player.Character) end
                     end
-                    if state.BringNPC and targetRoot and root then
-                        targetRoot.CFrame = root.CFrame + root.CFrame.LookVector * 5
+                end
+            else
+                for character2 in pairs(hnsObjects) do clearTag(character2) end
+            end
+
+            if live then
+                for _, model in ipairs(live:GetChildren()) do
+                    if model:IsA("Model") and not Players:GetPlayerFromCharacter(model) and model ~= character then
+                        local head = model:FindFirstChild("Head")
+                        local targetRoot = model:FindFirstChild("HumanoidRootPart")
+                        if state.RebelESP and head then
+                            scope:Set(head, "Size", Vector3.new(9.6, 9.6, 9.6))
+                            local highlight = rebelObjects[model]
+                            if not highlight or not highlight.Parent then
+                                highlight = Instance.new("Highlight")
+                                highlight.Name = "FastSC_Rebel"
+                                highlight.Adornee = model
+                                highlight.FillColor = Color3.fromRGB(255, 0, 0)
+                                highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+                                highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                                highlight.Parent = model
+                                rebelObjects[model] = highlight
+                            end
+                        else
+                            if head then scope:Restore(head, "Size") end
+                            clearRebel(model)
+                        end
+                        if state.BringNPC and targetRoot and root then
+                            targetRoot.CFrame = root.CFrame + root.CFrame.LookVector * 5
+                        end
                     end
                 end
             end
@@ -590,12 +588,7 @@ return function(ctx)
     end)
 
     scope:AddRestore(function()
-        if redLightOldNamecall and getrawmetatable and setreadonly then
-            local meta = getrawmetatable(game)
-            setreadonly(meta, false)
-            meta.__namecall = redLightOldNamecall
-            setreadonly(meta, true)
-        end
+        if redLightRestore then redLightRestore() redLightRestore = nil end
         for part, data in pairs(originalHitboxes) do
             if part and part.Parent then
                 pcall(function()
