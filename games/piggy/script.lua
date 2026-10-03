@@ -42,6 +42,7 @@ return function(ctx)
     local objectiveStatusLabel
     local currentObjective
     local objectiveEsp = false
+    local objectiveVisualTarget
     local autoCompleteBusy = false
 
     local bookName = "Piggy universe"
@@ -545,6 +546,19 @@ return function(ctx)
                     end
                 end
             end
+        end
+        if objectiveEsp then
+            local target = currentObjective and currentObjective.Target or nil
+            if target ~= objectiveVisualTarget then
+                clearKind("Objective")
+                objectiveVisualTarget = target
+            end
+            if target and target.Parent then
+                tag(target, "Objective", Color3.fromRGB(170, 100, 255), currentObjective.ItemName .. " -> " .. currentObjective.TargetName)
+            end
+        elseif objectiveVisualTarget then
+            clearKind("Objective")
+            objectiveVisualTarget = nil
         end
         local root = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
         for object, data in pairs(visuals) do
@@ -1169,6 +1183,32 @@ return function(ctx)
         end)
     end
 
+    local function setupObjectiveHelper(tab)
+        tab:CreateSection("Objective Helper")
+        objectiveCurrentLabel = tab:CreateLabel("Current objective: scanning...")
+        objectiveNeededLabel = tab:CreateLabel("Items needed: scanning...")
+        objectiveStatusLabel = tab:CreateLabel("Status: scanning map...")
+        tab:CreateToggle("Objective ESP", false, function(value)
+            objectiveEsp = value
+            if not value then
+                clearKind("Objective")
+                objectiveVisualTarget = nil
+            end
+        end)
+        tab:CreateButton("Refresh objectives", refreshObjectiveState)
+        tab:CreateButton("Teleport to required item", function()
+            local _, objective = refreshObjectiveState()
+            if not objective then return end
+            local item = findItemById(objective.Id)
+            if item then teleportItem(item) end
+        end)
+        tab:CreateButton("Teleport to objective target", function()
+            local _, objective = refreshObjectiveState()
+            local part = objective and getPart(objective.Target)
+            if part then Common.Root().CFrame = part.CFrame + Vector3.new(0, 2.5, 0) end
+        end)
+    end
+
     local function setupPlayerTab(tab, rage)
         tab:CreateSection("Movement")
         tab:CreateToggle("WalkSpeed", false, function(value)
@@ -1206,10 +1246,15 @@ return function(ctx)
 
         rage:CreateSection(bookName)
         rage:CreateLabel("Universe support: Book 1, Book 2 and extra Piggy places")
+        setupObjectiveHelper(rage)
         rage:CreateToggle("Auto complete objectives", false, function(value)
             autoComplete = value
             if value then
-                scope:Loop("autoComplete", 0.25, autoCompleteStep)
+                autoGrab = false
+                autoInteract = false
+                scope:StopTask("autoGrab")
+                scope:StopTask("autoInteract")
+                scope:Loop("autoComplete", 0.4, autoCompleteStep)
             else
                 scope:StopTask("autoComplete")
             end
@@ -1266,7 +1311,8 @@ return function(ctx)
         local playerTab = ctx.Window:CreateTab("Player", "P")
 
         main:CreateSection(bookName)
-        main:CreateLabel("Item tools use Piggy ItemPickupScript / ClickDetector objects")
+        main:CreateLabel("Item names are resolved from Piggy mesh, color and metadata signatures")
+        setupObjectiveHelper(main)
         setupItemTab(main)
         setupVisualTab(visualsTab)
         setupPlayerTab(playerTab, false)
@@ -1278,6 +1324,8 @@ return function(ctx)
             if humanoid then humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end
         end
     end)
+
+    scope:Loop("objectiveHelper", 0.4, refreshObjectiveState)
 
     scope:Loop("playerState", 0.05, function()
         local character = localPlayer.Character
