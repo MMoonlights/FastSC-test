@@ -398,37 +398,90 @@ return function(ctx)
         end
     end
 
+    local function meshSignatures(item)
+        local result = {}
+        local function add(object)
+            local meshId = ""
+            local textureId = ""
+            local scale
+            if object:IsA("SpecialMesh") then
+                meshId = cleanAssetId(object.MeshId)
+                textureId = cleanAssetId(object.TextureId)
+                scale = object.Scale
+            elseif object:IsA("MeshPart") then
+                meshId = cleanAssetId(object.MeshId)
+                local ok, texture = pcall(function() return object.TextureID end)
+                if ok then textureId = cleanAssetId(texture) end
+            end
+            result[#result + 1] = {
+                MeshId = meshId,
+                TextureId = textureId,
+                Scale = scale,
+            }
+        end
+        if item:IsA("SpecialMesh") or item:IsA("MeshPart") then add(item) end
+        for _, descendant in ipairs(item:GetDescendants()) do
+            if descendant:IsA("SpecialMesh") or descendant:IsA("MeshPart") then
+                add(descendant)
+            end
+        end
+        return result
+    end
+
+    local function hasMeshSignature(signatures, meshIds, textureIds)
+        for _, signature in ipairs(signatures) do
+            if meshIds and table.find(meshIds, signature.MeshId) then return signature end
+            if textureIds and table.find(textureIds, signature.TextureId) then return signature end
+        end
+    end
+
     local function signatureId(item)
         if item:FindFirstChildWhichIsA("SurfaceGui", true) and item:FindFirstChild("ItemPickupScript", true) then
             return "KeyCode"
         end
 
-        local mesh = item:FindFirstChildWhichIsA("SpecialMesh", true)
-        local meshId = mesh and cleanAssetId(mesh.MeshId) or ""
-        local textureId = mesh and cleanAssetId(mesh.TextureId) or ""
+        local signatures = meshSignatures(item)
         local color = particleColor(item)
         local colorName = color and colorIds[color] or nil
         local part = getPart(item)
         local brick = part and part.BrickColor.Name or nil
 
-        if meshId == "456878024" and colorName then return colorName .. "Key" end
-        if meshId == "524706126" then
+        if hasMeshSignature(signatures, {"16198309"}, {"16198294"}) then return "Hammer" end
+        if hasMeshSignature(signatures, {"16884681"}, {"16884673", "16884681"}) then return "Wrench" end
+        if hasMeshSignature(signatures, {"72012879"}) then return "Gun" end
+        if hasMeshSignature(signatures, {"741743576"}) then return "Carrot" end
+        if hasMeshSignature(signatures, {"1771168429"}, {"1771169634"}) then return "WaterGun" end
+        if hasMeshSignature(signatures, {"120607730"}) then return "Mallet" end
+        if hasMeshSignature(signatures, {"15886761"}) then return "Crossbow" end
+        if hasMeshSignature(signatures, {"725833400"}, {"725833458"}) then return "Ammo" end
+
+        local explosive = hasMeshSignature(signatures, {"27787143"})
+        if explosive then
+            if explosive.Scale and explosive.Scale.Magnitude < 1 then return "TNT" end
+            return "FireExtinguisher"
+        end
+
+        local gear = hasMeshSignature(signatures, {"524706126"})
+        if gear then
             if colorName == "Green" or brick == "Shamrock" then return "GreenGear" end
             if brick == "Persimmon" or colorName == "Red" or colorName == "White" then return "RedGear" end
             return "Gear"
         end
-        if meshId == "16198309" or textureId == "16198294" then return "Hammer" end
-        if meshId == "16884681" or textureId == "16884673" then return "Wrench" end
-        if meshId == "72012879" then return "Gun" end
-        if meshId == "741743576" then return "Carrot" end
-        if meshId == "1771168429" or textureId == "1771169634" then return "WaterGun" end
-        if meshId == "120607730" then return "Mallet" end
-        if meshId == "15886761" then return "Crossbow" end
-        if meshId == "27787143" and mesh then
-            if mesh.Scale.Magnitude < 1 then return "TNT" end
-            return "FireExtinguisher"
+
+        local keySignature
+        for _, signature in ipairs(signatures) do
+            if signature.MeshId == "456878024" then
+                local validScale = not signature.Scale
+                    or ((signature.Scale - Vector3.new(5, 5, 5)).Magnitude <= 0.25)
+                if validScale then
+                    keySignature = signature
+                    break
+                end
+            end
         end
-        if meshId == "725833400" or textureId == "725833458" then return "Ammo" end
+        if keySignature and colorName then
+            return colorName .. "Key"
+        end
 
         if item:IsA("UnionOperation") or item:FindFirstChildWhichIsA("UnionOperation", true) then
             if colorName == "Blue" then return "BlueKeycard" end
@@ -440,7 +493,7 @@ return function(ctx)
             local colorId = brickColors[brick]
             if brick == "Shamrock" then return "GreenGear" end
             if brick == "Persimmon" and item:FindFirstChildWhichIsA("UnionOperation", true) then return "Gas" end
-            return colorId .. "Key"
+            if keySignature then return colorId .. "Key" end
         end
 
         if brick == "Burnt Sienna" or brick == "BurntSienna" then return "Plank" end
