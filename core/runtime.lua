@@ -12,6 +12,12 @@ local function disconnect(value)
     end
 end
 
+local function cancelThread(thread)
+    if thread and task.cancel and coroutine.status(thread) ~= "dead" then
+        pcall(task.cancel, thread)
+    end
+end
+
 function Runtime.new(name)
     return setmetatable({
         Name = name or "scope",
@@ -22,6 +28,7 @@ function Runtime.new(name)
         Tasks = {},
         Restores = {},
         RenderSteps = {},
+        PropertyRestores = setmetatable({}, {__mode = "k"}),
     }, Scope)
 end
 
@@ -54,16 +61,41 @@ function Scope:TrackDrawing(drawing)
 end
 
 function Scope:Set(instance, property, value)
-    if not instance then return end
-    local ok, old = pcall(function() return instance[property] end)
-    if ok then
-        self.Restores[#self.Restores + 1] = function()
-            if instance and instance.Parent then
-                pcall(function() instance[property] = old end)
-            end
+    if not instance then return false end
+    local properties = self.PropertyRestores[instance]
+    if not properties then
+        properties = {}
+        self.PropertyRestores[instance] = properties
+    end
+    if properties[property] == nil then
+        local ok, old = pcall(function() return instance[property] end)
+        if ok then
+            properties[property] = {Value = old}
         end
     end
-    pcall(function() instance[property] = value end)
+    return pcall(function() instance[property] = value end)
+end
+
+function Scope:Restore(instance, property)
+    local properties = instance and self.PropertyRestores[instance]
+    local saved = properties and properties[property]
+    if not saved then return false end
+    pcall(function() instance[property] = saved.Value end)
+    properties[property] = nil
+    if next(properties) == nil then
+        self.PropertyRestores[instance] = nil
+    end
+    return true
+end
+
+function Scope:RestoreInstance(instance)
+    local properties = instance and self.PropertyRestores[instance]
+    if not properties then return end
+    for property, saved in pairs(properties) do
+        pcall(function() instance[property] = saved.Value end)
+        properties[property] = nil
+    end
+    self.PropertyRestores[instance] = nil
 end
 
 function Scope:AddRestore(callback)
@@ -75,21 +107,23 @@ function Scope:Spawn(key, callback)
     if not self.Alive then return nil end
     if key then self:StopTask(key) end
     local token = {Alive = true}
-    if key then self.Tasks[key] = token end
-    task.spawn(function()
+    local thread
+    thread = task.spawn(function()
         pcall(callback, token)
         if key and self.Tasks[key] == token then
             self.Tasks[key] = nil
         end
     end)
+    token.Thread = thread
+    if key then self.Tasks[key] = token end
     return token
 end
 
 function Scope:Loop(key, interval, callback)
     return self:Spawn(key, function(token)
         while self.Alive and token.Alive do
-            local ok = pcall(callback, token)
-            if not ok and not self.Alive then break end
+            pcall(callback, token)
+            if not self.Alive or not token.Alive then break end
             task.wait(interval or 0)
         end
     end)
@@ -97,14 +131,14 @@ end
 
 function Scope:StopTask(key)
     local token = self.Tasks[key]
-    if token then
-        token.Alive = false
-        self.Tasks[key] = nil
-    end
+    if not token then return end
+    token.Alive = false
+    self.Tasks[key] = nil
+    cancelThread(token.Thread)
 end
 
 function Scope:BindRenderStep(name, priority, callback)
-    if not self.Alive then return end
+    if not self.Alive then return nil end
     local key = "FastSC_" .. self.Name .. "_" .. name
     pcall(function() RunService:UnbindFromRenderStep(key) end)
     RunService:BindToRenderStep(key, priority or Enum.RenderPriority.Character.Value + 1, callback)
@@ -124,34 +158,41 @@ end
 function Scope:Destroy()
     if not self.Alive then return end
     self.Alive = false
-    for _, token in pairs(self.Tasks) do
+    for key, token in pairs(self.Tasks) do
         token.Alive = false
+        cancelThread(token.Thread)
+        self.Tasks[key] = nil
     end
-    table.clear(self.Tasks)
     for key in pairs(self.RenderSteps) do
         pcall(function() RunService:UnbindFromRenderStep(key) end)
+        self.RenderSteps[key] = nil
     end
-    table.clear(self.RenderSteps)
     for i = #self.Connections, 1, -1 do
         disconnect(self.Connections[i])
+        self.Connections[i] = nil
     end
-    table.clear(self.Connections)
     for i = #self.Drawings, 1, -1 do
         local drawing = self.Drawings[i]
         pcall(function()
             if drawing.Remove then drawing:Remove() elseif drawing.Destroy then drawing:Destroy() end
         end)
+        self.Drawings[i] = nil
     end
-    table.clear(self.Drawings)
+    for instance, properties in pairs(self.PropertyRestores) do
+        for property, saved in pairs(properties) do
+            pcall(function() instance[property] = saved.Value end)
+        end
+        self.PropertyRestores[instance] = nil
+    end
+    for i = #self.Restores, 1, -1 do
+        pcall(self.Restores[i])
+        self.Restores[i] = nil
+    end
     for i = #self.Instances, 1, -1 do
         local instance = self.Instances[i]
         pcall(function() instance:Destroy() end)
+        self.Instances[i] = nil
     end
-    table.clear(self.Instances)
-    for i = #self.Restores, 1, -1 do
-        pcall(self.Restores[i])
-    end
-    table.clear(self.Restores)
 end
 
 return Runtime
