@@ -1382,7 +1382,9 @@ return function(ctx)
             autoGrab = value
             if value then
                 autoComplete = false
+                autoInteract = false
                 scope:StopTask("autoComplete")
+                scope:StopTask("autoInteract")
                 scope:Loop("autoGrab", 0.2, function()
                     local item = nearestItem()
                     if item then grabItem(item, false, itemId(item)) end
