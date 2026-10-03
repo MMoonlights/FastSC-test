@@ -135,6 +135,9 @@ for token in [
     "objectiveCooldowns",
     "disableEnemyTouchTransmitters",
     "restoreEnemyTouchTransmitters",
+    "isWorldItem",
+    "playerCharacterAncestor",
+    'object:IsA("Tool")',
 ]:
     assert token in piggy, token
 
