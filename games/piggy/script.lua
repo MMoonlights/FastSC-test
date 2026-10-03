@@ -77,6 +77,234 @@ return function(ctx)
         end
     end
 
+    local itemNameCache = setmetatable({}, {__mode = "k"})
+
+    local displayNames = {
+        BlueKey = "Blue Key",
+        OrangeKey = "Orange Key",
+        GreenKey = "Green Key",
+        RedKey = "Red Key",
+        YellowKey = "Yellow Key",
+        WhiteKey = "White Key",
+        PurpleKey = "Purple Key",
+        BlueKeycard = "Blue Keycard",
+        RedKeycard = "Red Keycard",
+        OrangeKeycard = "Orange Keycard",
+        GreenKeycard = "Green Keycard",
+        RedGear = "Red Gear",
+        GreenGear = "Green Gear",
+        WhiteGear = "White Gear",
+        KeyCode = "Key Code",
+        WaterGun = "Water Gun",
+        FireExtinguisher = "Fire Extinguisher",
+        SmokeBomb = "Smoke Bomb",
+        SmokeGrenade = "Smoke Grenade",
+        GrapplingHook = "Grappling Hook",
+        WoodenSword = "Wooden Sword",
+        FencingFoil = "Fencing Foil",
+        EmptyVial = "Empty Vial",
+        GreenVial = "Green Vial",
+        PinkVial = "Pink Vial",
+        GreenWire = "Green Wire",
+        RedWire = "Red Wire",
+        BlueWire = "Blue Wire",
+        YellowWire = "Yellow Wire",
+        Screwdriver = "Screwdriver",
+        Scissors = "Scissors",
+        Blowtorch = "Blowtorch",
+        Flashlight = "Flashlight",
+        Crowbar = "Crowbar",
+        Dynamite = "Dynamite",
+        Battery = "Battery",
+        Batteries = "Batteries",
+        Remote = "Remote",
+        Ladder = "Ladder",
+        Shovel = "Shovel",
+        Candle = "Candle",
+        Hammer = "Hammer",
+        Wrench = "Wrench",
+        Plank = "Plank",
+        Ammo = "Ammo",
+        Gun = "Gun",
+        Carrot = "Carrot",
+        Grass = "Grass",
+        Bone = "Bone",
+        Book = "Book",
+        Rope = "Rope",
+        Ticket = "Ticket",
+        TNT = "TNT",
+        Pipe = "Pipe",
+        Bat = "Bat",
+        Gas = "Gas",
+        Axe = "Axe",
+        Gear = "Gear",
+        Keycard = "Keycard",
+        Key = "Key",
+        Mallet = "Mallet",
+        Crossbow = "Crossbow",
+    }
+
+    local aliases = {}
+    local function token(value)
+        return string.lower(tostring(value or "")):gsub("[^%w]", "")
+    end
+
+    for id, display in pairs(displayNames) do
+        aliases[token(id)] = id
+        aliases[token(display)] = id
+    end
+
+    local function cleanAssetId(value)
+        return tostring(value or ""):match("%d+") or ""
+    end
+
+    local function particleColor(item)
+        local emitter = item:FindFirstChildWhichIsA("ParticleEmitter", true)
+        return emitter and tostring(emitter.Color) or nil
+    end
+
+    local colorIds = {
+        ["0 0 1 1 0 1 0 1 1 0 "] = "Blue",
+        ["0 1 0.333333 0 0 1 1 0.333333 0 0 "] = "Orange",
+        ["0 0 1 0 0 1 0 1 0 0 "] = "Green",
+        ["0 1 0 0 0 1 1 0 0 0 "] = "Red",
+        ["0 1 1 0 0 1 1 1 0 0 "] = "Yellow",
+        ["0 1 1 1 0 1 1 1 1 0 "] = "White",
+        ["0 0.666667 0.333333 1 0 1 0.666667 0.333333 1 0 "] = "Purple",
+        ["0 0.333333 0.666667 0 0 1 0.333333 0.666667 0 0 "] = "Green",
+    }
+
+    local brickColors = {
+        ["Lime green"] = "Green",
+        ["Really red"] = "Red",
+        ["Toothpaste"] = "Blue",
+        ["Neon orange"] = "Orange",
+        ["Gold"] = "Yellow",
+        ["Alder"] = "Purple",
+        ["Institutional white"] = "White",
+        ["Shamrock"] = "Green",
+        ["Persimmon"] = "Red",
+    }
+
+    local function explicitId(item)
+        for _, key in ipairs({"DisplayName", "ItemName", "ToolName", "ItemType", "Type", "KeyType"}) do
+            local value = item:GetAttribute(key)
+            if type(value) == "string" and aliases[token(value)] then
+                return aliases[token(value)]
+            end
+        end
+        for _, descendant in ipairs(item:GetDescendants()) do
+            if descendant:IsA("StringValue") then
+                local name = string.lower(descendant.Name)
+                if name == "displayname" or name == "itemname" or name == "toolname" or name == "itemtype" or name == "type" then
+                    local id = aliases[token(descendant.Value)]
+                    if id then return id end
+                end
+            end
+        end
+    end
+
+    local function treeId(item)
+        local values = {item.Name}
+        for _, descendant in ipairs(item:GetDescendants()) do
+            values[#values + 1] = descendant.Name
+        end
+        local joined = token(table.concat(values, " "))
+        for alias, id in pairs(aliases) do
+            if #alias >= 4 and joined:find(alias, 1, true) then return id end
+        end
+    end
+
+    local function signatureId(item)
+        if item:FindFirstChildWhichIsA("SurfaceGui", true) and item:FindFirstChild("ItemPickupScript", true) then
+            return "KeyCode"
+        end
+
+        local mesh = item:FindFirstChildWhichIsA("SpecialMesh", true)
+        local meshId = mesh and cleanAssetId(mesh.MeshId) or ""
+        local textureId = mesh and cleanAssetId(mesh.TextureId) or ""
+        local color = particleColor(item)
+        local colorName = color and colorIds[color] or nil
+        local part = getPart(item)
+        local brick = part and part.BrickColor.Name or nil
+
+        if meshId == "456878024" and colorName then return colorName .. "Key" end
+        if meshId == "524706126" then
+            if colorName == "Green" or brick == "Shamrock" then return "GreenGear" end
+            if brick == "Persimmon" or colorName == "Red" or colorName == "White" then return "RedGear" end
+            return "Gear"
+        end
+        if meshId == "16198309" or textureId == "16198294" then return "Hammer" end
+        if meshId == "16884681" or textureId == "16884673" then return "Wrench" end
+        if meshId == "72012879" then return "Gun" end
+        if meshId == "741743576" then return "Carrot" end
+        if meshId == "1771168429" or textureId == "1771169634" then return "WaterGun" end
+        if meshId == "120607730" then return "Mallet" end
+        if meshId == "15886761" then return "Crossbow" end
+        if meshId == "27787143" and mesh then
+            if mesh.Scale.Magnitude < 1 then return "TNT" end
+            return "FireExtinguisher"
+        end
+        if meshId == "725833400" or textureId == "725833458" then return "Ammo" end
+
+        if item:IsA("UnionOperation") or item:FindFirstChildWhichIsA("UnionOperation", true) then
+            if colorName == "Blue" then return "BlueKeycard" end
+            if colorName == "Orange" then return "OrangeKeycard" end
+            if colorName == "Red" then return "RedKeycard" end
+        end
+
+        if brickColors[brick] then
+            local colorId = brickColors[brick]
+            if brick == "Shamrock" then return "GreenGear" end
+            if brick == "Persimmon" and item:FindFirstChildWhichIsA("UnionOperation", true) then return "Gas" end
+            return colorId .. "Key"
+        end
+
+        if brick == "Burnt Sienna" or brick == "BurntSienna" then return "Plank" end
+    end
+
+    local function itemId(item)
+        if not item then return nil end
+        local cached = itemNameCache[item]
+        if cached then return cached.Id end
+        local id = explicitId(item) or signatureId(item) or treeId(item) or aliases[token(item.Name)]
+        if not id and tostring(item.Name):find("%a") then
+            local normalized = token(item.Name)
+            id = aliases[normalized]
+            if not id then
+                local text = tostring(item.Name):gsub("_", " "):gsub("(%l)(%u)", "%1 %2")
+                text = text:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+                id = text
+            end
+        end
+        if not id then
+            local part = getPart(item)
+            local color = part and brickColors[part.BrickColor.Name] or nil
+            id = color and (color .. "Item") or "UnknownItem"
+        end
+        itemNameCache[item] = {Id = id, Name = displayNames[id] or id:gsub("(%l)(%u)", "%1 %2")}
+        return id
+    end
+
+    local function itemDisplayName(item)
+        local id = itemId(item)
+        local cached = itemNameCache[item]
+        if cached and cached.Name then return cached.Name end
+        return displayNames[id] or tostring(id or "Unknown Item")
+    end
+
+    local function book2ItemFrom(instance)
+        if instance.Name == "ItemHandler" and instance.Parent then return instance.Parent end
+        if instance:IsA("Tool") and (instance:FindFirstChildWhichIsA("ProximityPrompt", true) or instance:FindFirstChildWhichIsA("ClickDetector", true)) then
+            return instance
+        end
+        if instance:IsA("Model") and (instance:FindFirstChildWhichIsA("ProximityPrompt", true) or instance:FindFirstChildWhichIsA("ClickDetector", true)) then
+            if instance:FindFirstChild("Handle") or aliases[token(instance.Name)] or not tostring(instance.Name):find("%a") then
+                return instance
+            end
+        end
+    end
+
     local function trueFlag(container, name)
         if not container then return false end
         local value = container:FindFirstChild(name)
@@ -140,8 +368,11 @@ return function(ctx)
     end
 
     local function register(instance)
-        local item = itemObjectFrom(instance)
-        if item then items[item] = true end
+        local item = itemObjectFrom(instance) or book2ItemFrom(instance)
+        if item then
+            items[item] = true
+            itemNameCache[item] = nil
+        end
         if instance:IsA("ClickDetector") or instance:IsA("ProximityPrompt") then
             interactives[instance] = true
         end
@@ -251,7 +482,7 @@ return function(ctx)
     refreshVisuals = function()
         if itemEsp then
             for item in pairs(items) do
-                if item.Parent then tag(item, "Item", Color3.fromRGB(255, 210, 70), item.Name) end
+                if item.Parent then tag(item, "Item", Color3.fromRGB(255, 210, 70), itemDisplayName(item)) end
             end
         end
         if piggyEsp then
@@ -322,7 +553,7 @@ return function(ctx)
                 items[item] = nil
             end
         end
-        table.sort(list, function(a, b) return a.Name < b.Name end)
+        table.sort(list, function(a, b) return itemDisplayName(a) < itemDisplayName(b) end)
         return list
     end
 
@@ -330,9 +561,10 @@ return function(ctx)
         local names = {}
         local seen = {}
         for _, item in ipairs(itemList()) do
-            if not seen[item.Name] then
-                seen[item.Name] = true
-                names[#names + 1] = item.Name
+            local name = itemDisplayName(item)
+            if not seen[name] then
+                seen[name] = true
+                names[#names + 1] = name
             end
         end
         return names
@@ -343,7 +575,7 @@ return function(ctx)
         local best
         local bestDistance = math.huge
         for item in pairs(items) do
-            if item.Parent and item.Name == name then
+            if item.Parent and itemDisplayName(item) == name then
                 local part = getPart(item)
                 if part then
                     local distance = root and (part.Position - root.Position).Magnitude or 0
