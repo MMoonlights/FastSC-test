@@ -13,60 +13,95 @@ return function(ctx)
         MaxDistance = 150,
         Hitbox = 2,
     }
-    local originals = {
-        FireRate = {},
-        ReloadTime = {},
-        EReloadTime = {},
-        Spread = {},
-        Recoil = {},
-    }
     local circle = Common.DrawingCircle(scope, settings.FOV, Color3.fromRGB(230, 60, 80))
+    local weapons = ReplicatedStorage:FindFirstChild("Weapons")
+    local weaponValues = weapons and Common.CreateDescendantCache(scope, weapons, function(instance)
+        return instance:IsA("ValueBase")
+    end)
 
-    local function changeValues(names, bucket, enabled, value)
-        local weapons = ReplicatedStorage:FindFirstChild("Weapons")
-        if not weapons then return end
-        for _, item in ipairs(weapons:GetDescendants()) do
-            if table.find(names, item.Name) and item:IsA("ValueBase") then
-                if enabled then
-                    if originals[bucket][item] == nil then originals[bucket][item] = item.Value end
-                    pcall(function() item.Value = value end)
-                elseif originals[bucket][item] ~= nil then
-                    pcall(function() item.Value = originals[bucket][item] end)
-                    originals[bucket][item] = nil
-                end
+    local function eachWeaponValue(names, callback)
+        if not weaponValues then return end
+        weaponValues:Each(function(item)
+            if table.find(names, item.Name) then callback(item) end
+        end)
+    end
+
+    local function changeValues(names, enabled, value)
+        eachWeaponValue(names, function(item)
+            if enabled then
+                scope:Set(item, "Value", value)
+            else
+                scope:Restore(item, "Value")
+            end
+        end)
+    end
+
+    local function ammoValues()
+        local gui = localPlayer:FindFirstChild("PlayerGui")
+        local client = gui and gui:FindFirstChild("GUI") and gui.GUI:FindFirstChild("Client")
+        local variables = client and client:FindFirstChild("Variables")
+        return variables and variables:FindFirstChild("ammocount"), variables and variables:FindFirstChild("ammocount2")
+    end
+
+    local function applyHitbox(root)
+        if not root then return end
+        if settings.Hitbox > 2 then
+            local size = settings.Hitbox
+            scope:Set(root, "Size", Vector3.new(size, size, size))
+            scope:Set(root, "Transparency", 0.5)
+            scope:Set(root, "CanCollide", false)
+        else
+            scope:Restore(root, "Size")
+            scope:Restore(root, "Transparency")
+            scope:Restore(root, "CanCollide")
+        end
+    end
+
+    local function refreshHitboxes()
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= localPlayer and player.Team ~= localPlayer.Team and player.Character then
+                applyHitbox(player.Character:FindFirstChild("HumanoidRootPart"))
             end
         end
     end
 
+    local function attachPlayer(player)
+        if player == localPlayer then return end
+        scope:Connect(player.CharacterAdded, function(character)
+            local root = character:WaitForChild("HumanoidRootPart", 5)
+            if player.Team ~= localPlayer.Team then applyHitbox(root) end
+        end)
+    end
+
+    for _, player in ipairs(Players:GetPlayers()) do attachPlayer(player) end
+    scope:Connect(Players.PlayerAdded, attachPlayer)
+
     tab:CreateSection("Gun mods")
     tab:CreateToggle("Infinite ammo", false, function(enabled)
         if enabled then
-            scope:Loop("ammo", 0.05, function()
-                local gui = localPlayer:FindFirstChild("PlayerGui")
-                local variables = gui and gui:FindFirstChild("GUI") and gui.GUI:FindFirstChild("Client") and gui.GUI.Client:FindFirstChild("Variables")
-                if variables then
-                    local ammo = variables:FindFirstChild("ammocount")
-                    local ammo2 = variables:FindFirstChild("ammocount2")
-                    if ammo then ammo.Value = 778 end
-                    if ammo2 then ammo2.Value = 778 end
-                end
+            scope:Loop("ammo", 0.1, function()
+                local ammo, ammo2 = ammoValues()
+                if ammo then scope:Set(ammo, "Value", 778) end
+                if ammo2 then scope:Set(ammo2, "Value", 778) end
             end)
         else
             scope:StopTask("ammo")
+            local ammo, ammo2 = ammoValues()
+            if ammo then scope:Restore(ammo, "Value") end
+            if ammo2 then scope:Restore(ammo2, "Value") end
         end
     end)
     tab:CreateToggle("Quick fire rate", false, function(enabled)
-        changeValues({"FireRate", "BFireRate"}, "FireRate", enabled, 0.01)
+        changeValues({"FireRate", "BFireRate"}, enabled, 0.01)
     end)
     tab:CreateToggle("Quick reload", false, function(enabled)
-        changeValues({"ReloadTime"}, "ReloadTime", enabled, 0.001)
-        changeValues({"EReloadTime"}, "EReloadTime", enabled, 0.001)
+        changeValues({"ReloadTime", "EReloadTime"}, enabled, 0.001)
     end)
     tab:CreateToggle("No spread", false, function(enabled)
-        changeValues({"MaxSpread", "Spread", "SpreadControl"}, "Spread", enabled, 0)
+        changeValues({"MaxSpread", "Spread", "SpreadControl"}, enabled, 0)
     end)
     tab:CreateToggle("No recoil", false, function(enabled)
-        changeValues({"RecoilControl", "Recoil"}, "Recoil", enabled, 0)
+        changeValues({"RecoilControl", "Recoil"}, enabled, 0)
     end)
 
     tab:CreateSection("Aim")
@@ -83,27 +118,10 @@ return function(ctx)
     end)
     tab:CreateSlider("Enemy hitbox", {Min = 2, Max = 25, Default = 2}, function(value)
         settings.Hitbox = value
+        refreshHitboxes()
     end)
 
-    scope:Connect(RunService.Heartbeat, function()
-        local size = settings.Hitbox
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player ~= localPlayer and player.Team ~= localPlayer.Team and player.Character then
-                local root = player.Character:FindFirstChild("HumanoidRootPart")
-                if root then
-                    if size > 2 then
-                        root.Size = Vector3.new(size, size, size)
-                        root.Transparency = 0.5
-                        root.CanCollide = false
-                    else
-                        root.Size = Vector3.new(2, 2, 1)
-                        root.Transparency = 1
-                        root.CanCollide = false
-                    end
-                end
-            end
-        end
-    end)
+    scope:Connect(localPlayer:GetPropertyChangedSignal("Team"), refreshHitboxes)
 
     scope:Connect(RunService.RenderStepped, function()
         if circle then
@@ -112,7 +130,12 @@ return function(ctx)
             circle.Visible = settings.Aimbot
         end
         if not settings.Aimbot then return end
-        local target = Common.NearestToCursor({FOV = settings.FOV, TeamCheck = true, Part = "Head", MaxDistance = settings.MaxDistance})
+        local target = Common.NearestToCursor({
+            FOV = settings.FOV,
+            TeamCheck = true,
+            Part = "Head",
+            MaxDistance = settings.MaxDistance,
+        })
         local head = target and target.Character and target.Character:FindFirstChild("Head")
         local camera = workspace.CurrentCamera
         if head and camera then
