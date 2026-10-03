@@ -52,6 +52,12 @@ return function(ctx)
     local freeInteractionCooldowns = setmetatable({}, {__mode = "k"})
     local objectiveMapLabel
     local itemsById = {}
+    local requirementCounts = {}
+    local requirementIdByValue = setmetatable({}, {__mode = "k"})
+    local trackedRequirements = setmetatable({}, {__mode = "k"})
+    local itemDropdown
+    local itemDropdownSignature = ""
+    local itemUiDirty = true
 
     local bookName = "Piggy universe"
     if game.PlaceId == 4623386862 then
@@ -471,13 +477,42 @@ return function(ctx)
     end
 
     local function requirementExists(id)
-        local targetToken = token(id)
-        for value in pairs(requirements) do
-            if value.Parent and token(value.Value) == targetToken then
-                return true
-            end
+        return (requirementCounts[id] or 0) > 0
+    end
+
+    local function updateRequirement(value)
+        local old = requirementIdByValue[value]
+        if old then
+            requirementCounts[old] = math.max(0, (requirementCounts[old] or 1) - 1)
+            if requirementCounts[old] == 0 then requirementCounts[old] = nil end
         end
-        return false
+        local id = aliases[token(value.Value)]
+        requirementIdByValue[value] = id
+        if id then requirementCounts[id] = (requirementCounts[id] or 0) + 1 end
+        itemUiDirty = true
+    end
+
+    local function trackRequirement(value)
+        requirements[value] = true
+        if not trackedRequirements[value] then
+            trackedRequirements[value] = true
+            updateRequirement(value)
+            scope:Connect(value:GetPropertyChangedSignal("Value"), function()
+                updateRequirement(value)
+            end)
+        end
+    end
+
+    local function untrackRequirement(value)
+        requirements[value] = nil
+        local id = requirementIdByValue[value]
+        if id then
+            requirementCounts[id] = math.max(0, (requirementCounts[id] or 1) - 1)
+            if requirementCounts[id] == 0 then requirementCounts[id] = nil end
+        end
+        requirementIdByValue[value] = nil
+        trackedRequirements[value] = nil
+        itemUiDirty = true
     end
 
     local function ancestorRequirementLocks(item)
@@ -527,6 +562,7 @@ return function(ctx)
     local function indexItem(item)
         if not item or not item.Parent or not isWorldItem(item) then return end
         items[item] = true
+        itemUiDirty = true
         local id = itemId(item)
         local bucket = itemsById[id]
         if not bucket then
@@ -540,6 +576,7 @@ return function(ctx)
         local cached = itemNameCache[item]
         local id = cached and cached.Id
         items[item] = nil
+        itemUiDirty = true
         if id then
             local bucket = itemsById[id]
             if bucket then
@@ -641,7 +678,7 @@ return function(ctx)
             interactives[instance] = true
         end
         if instance:IsA("StringValue") then
-            requirements[instance] = true
+            trackRequirement(instance)
         end
         if instance:IsA("BasePart") then
             local lower = string.lower(instance.Name)
@@ -665,7 +702,11 @@ return function(ctx)
         traps[instance] = nil
         doors[instance] = nil
         bots[instance] = nil
-        requirements[instance] = nil
+        if instance:IsA("StringValue") then
+            untrackRequirement(instance)
+        else
+            requirements[instance] = nil
+        end
         escapeTargets[instance] = nil
         itemNameCache[instance] = nil
         local visual = visuals[instance]
@@ -863,6 +904,19 @@ return function(ctx)
             end
         end
         return names
+    end
+
+    local function refreshItemDropdown()
+        if not itemDropdown or not itemUiDirty then return end
+        local names = itemNames()
+        local signature = table.concat(names, "\0")
+        itemUiDirty = false
+        if signature == itemDropdownSignature then return end
+        itemDropdownSignature = signature
+        itemDropdown:Refresh(names)
+        if not selectedItem or not table.find(names, selectedItem) then
+            selectedItem = names[1]
+        end
     end
 
     local function findItemByName(name)
@@ -1835,14 +1889,14 @@ return function(ctx)
     local function setupItemTab(tab)
         tab:CreateSection("Items")
         local names = itemNames()
-        local dropdown = tab:CreateDropdown("Item", names, names[1], function(value)
+        itemDropdown = tab:CreateDropdown("Item", names, names[1], function(value)
             selectedItem = value
         end)
+        itemDropdownSignature = table.concat(names, "\0")
         selectedItem = names[1]
         tab:CreateButton("Refresh item list", function()
-            local updated = itemNames()
-            dropdown:Refresh(updated)
-            if not selectedItem or not table.find(updated, selectedItem) then selectedItem = updated[1] end
+            itemUiDirty = true
+            refreshItemDropdown()
         end)
         tab:CreateButton("Grab selected item", function()
             local item = selectedItem and findItemByName(selectedItem)
@@ -1883,6 +1937,7 @@ return function(ctx)
             local part = objective and getPart(objective.Target)
             if part then Common.Root().CFrame = part.CFrame + Vector3.new(0, 2.5, 0) end
         end)
+        refreshObjectiveState()
     end
 
     local function setupPlayerTab(tab, rage)
@@ -2014,8 +2069,8 @@ return function(ctx)
         end
     end)
 
-    task.defer(refreshObjectiveState)
     scope:Loop("objectiveHelper", 0.1, refreshObjectiveState)
+    scope:Loop("itemUiRefresh", 0.1, refreshItemDropdown)
 
     scope:Loop("playerState", 0.05, function()
         local character = localPlayer.Character
