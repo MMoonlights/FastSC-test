@@ -999,8 +999,8 @@ return function(ctx)
         if not part then return false end
         local root = Common.Root()
         local old = root.CFrame
-        root.CFrame = part.CFrame + Vector3.new(0, 2.5, 0)
-        task.wait(0.03)
+        beginAutomationMove(part.CFrame + Vector3.new(0, 2.5, 0))
+        task.wait(0.02)
         if interactive:IsA("ClickDetector") and fireclickdetector then
             pcall(fireclickdetector, interactive)
         elseif interactive:IsA("ProximityPrompt") and fireproximityprompt then
@@ -1010,8 +1010,13 @@ return function(ctx)
         if (string.find(lower, "exit", 1, true) or string.find(lower, "escape", 1, true)) and firetouchinterest then
             Common.Touch(root, part)
         end
-        task.wait(0.04)
-        if returnAfter and root.Parent then root.CFrame = old end
+        task.wait(0.03)
+        endAutomationMove()
+        if returnAfter and root.Parent then
+            root.CFrame = old
+            root.AssemblyLinearVelocity = Vector3.zero
+            root.AssemblyAngularVelocity = Vector3.zero
+        end
         return true
     end
 
@@ -1118,6 +1123,75 @@ return function(ctx)
         return table.concat(chunks, " ")
     end
 
+    local function readPanelCode(host)
+        if not host then return nil end
+        for _, descendant in ipairs(host:GetDescendants()) do
+            local lower = string.lower(descendant.Name)
+            local value
+            if descendant:IsA("StringValue") then
+                value = descendant.Value
+            elseif descendant:IsA("IntValue") or descendant:IsA("NumberValue") then
+                value = tostring(descendant.Value)
+            elseif descendant:IsA("TextLabel") or descendant:IsA("TextBox") then
+                value = descendant.Text
+            end
+            if value and (lower:find("code", 1, true) or lower:find("password", 1, true) or lower:find("pin", 1, true)) then
+                local digits = tostring(value):gsub("%D", "")
+                if #digits >= 2 and #digits <= 8 then return digits end
+            end
+        end
+    end
+
+    local function panelDigitButtons(host)
+        local buttons = {}
+        if not host then return buttons end
+        for _, descendant in ipairs(host:GetDescendants()) do
+            if descendant:IsA("ClickDetector") then
+                local parent = descendant.Parent
+                local value = parent and parent.Name or ""
+                local label = parent and parent:FindFirstChildWhichIsA("TextLabel", true)
+                if label and tostring(label.Text):match("^%s*%d%s*$") then
+                    value = label.Text
+                end
+                local digit = tostring(value):match("(%d)")
+                if digit and #digit == 1 and not buttons[digit] then
+                    buttons[digit] = descendant
+                end
+            elseif descendant:IsA("ProximityPrompt") then
+                local value = tostring(descendant.ObjectText or descendant.ActionText or descendant.Parent.Name)
+                local digit = value:match("(%d)")
+                if digit and #digit == 1 and not buttons[digit] then
+                    buttons[digit] = descendant
+                end
+            end
+        end
+        return buttons
+    end
+
+    local function solveCodePanel(host)
+        local name = string.lower(host and host.Name or "")
+        if not (name:find("code", 1, true) or name:find("keypad", 1, true) or name:find("terminal", 1, true) or name:find("panel", 1, true)) then
+            return false
+        end
+        local code = readPanelCode(host)
+        if not code then return false end
+        local buttons = panelDigitButtons(host)
+        for index = 1, #code do
+            local button = buttons[code:sub(index, index)]
+            if not button then return false end
+        end
+        for index = 1, #code do
+            local button = buttons[code:sub(index, index)]
+            if button:IsA("ClickDetector") and fireclickdetector then
+                pcall(fireclickdetector, button)
+            elseif button:IsA("ProximityPrompt") and fireproximityprompt then
+                pcall(fireproximityprompt, button)
+            end
+            task.wait(0.015)
+        end
+        return true
+    end
+
     local function isFreeProgressInteraction(interactive)
         if not interactive or not interactive.Parent then return false end
         if itemObjectFrom(interactive) or belongsToItem(interactive) then return false end
@@ -1171,10 +1245,14 @@ return function(ctx)
 
         beginAutomationMove(bestPart.CFrame + bestPart.CFrame.LookVector * -2 + Vector3.new(0, 1.5, 0))
         task.wait(0.025)
-        if best:IsA("ClickDetector") and fireclickdetector then
-            pcall(fireclickdetector, best)
-        elseif best:IsA("ProximityPrompt") and fireproximityprompt then
-            pcall(fireproximityprompt, best)
+        local host = interactionHost(best)
+        local solved = solveCodePanel(host)
+        if not solved then
+            if best:IsA("ClickDetector") and fireclickdetector then
+                pcall(fireclickdetector, best)
+            elseif best:IsA("ProximityPrompt") and fireproximityprompt then
+                pcall(fireproximityprompt, best)
+            end
         end
         freeInteractionCooldowns[best] = os.clock() + 0.8
         task.wait(0.06)
@@ -1747,14 +1825,14 @@ return function(ctx)
         rage:CreateSection(bookName)
         rage:CreateLabel("Universe support: Book 1, Book 2 and extra Piggy places")
         setupObjectiveHelper(rage)
-        rage:CreateToggle("Auto complete objectives", false, function(value)
+        rage:CreateToggle("Auto Object / Full run", false, function(value)
             autoComplete = value
             if value then
                 autoGrab = false
                 autoInteract = false
                 scope:StopTask("autoGrab")
                 scope:StopTask("autoInteract")
-                scope:Loop("autoComplete", 0.4, autoCompleteStep)
+                scope:Loop("autoComplete", 0.05, autoCompleteStep)
             else
                 scope:StopTask("autoComplete")
             end
@@ -1766,7 +1844,7 @@ return function(ctx)
                 autoInteract = false
                 scope:StopTask("autoComplete")
                 scope:StopTask("autoInteract")
-                scope:Loop("autoGrab", 0.2, function()
+                scope:Loop("autoGrab", 0.08, function()
                     local item = nearestItem()
                     if item then grabItem(item, false, itemId(item)) end
                 end)
@@ -1781,7 +1859,7 @@ return function(ctx)
                 autoGrab = false
                 scope:StopTask("autoComplete")
                 scope:StopTask("autoGrab")
-                scope:Loop("autoInteract", 0.2, function()
+                scope:Loop("autoInteract", 0.08, function()
                     local list = interactiveList()
                     if #list == 0 then return end
                     completeCursor = completeCursor % #list + 1
