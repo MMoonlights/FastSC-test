@@ -384,6 +384,93 @@ return function(ctx)
         return displayNames[id] or tostring(id or "Unknown Item")
     end
 
+    local function requirementExists(id)
+        local targetToken = token(id)
+        for value in pairs(requirements) do
+            if value.Parent and token(value.Value) == targetToken then
+                return true
+            end
+        end
+        return false
+    end
+
+    local function computeReachable(part)
+        local character = localPlayer.Character
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+        if not root or not part or not part.Parent then return false end
+
+        local cached = reachabilityCache[part]
+        local now = os.clock()
+        if cached and now - cached.Time < 1.25 then
+            if (cached.Origin - root.Position).Magnitude < 10 and (cached.Target - part.Position).Magnitude < 3 then
+                return cached.Value
+            end
+        end
+
+        local offsets = {
+            Vector3.zero,
+            Vector3.new(0, -math.max(1, part.Size.Y * 0.5), 0),
+            Vector3.new(3, 0, 0),
+            Vector3.new(-3, 0, 0),
+            Vector3.new(0, 0, 3),
+            Vector3.new(0, 0, -3),
+        }
+
+        local reachable = false
+        for _, offset in ipairs(offsets) do
+            local path = PathfindingService:CreatePath({
+                AgentRadius = 2,
+                AgentHeight = 5,
+                AgentCanJump = true,
+                AgentCanClimb = true,
+                WaypointSpacing = 4,
+            })
+            local ok = pcall(function()
+                path:ComputeAsync(root.Position, part.Position + offset)
+            end)
+            if ok and path.Status == Enum.PathStatus.Success then
+                reachable = true
+                break
+            end
+        end
+
+        if not reachable and (part.Position - root.Position).Magnitude <= 12 then
+            local direction = part.Position - root.Position
+            local parameters = RaycastParams.new()
+            parameters.FilterType = Enum.RaycastFilterType.Exclude
+            parameters.FilterDescendantsInstances = {character}
+            local hit = workspace:Raycast(root.Position, direction, parameters)
+            if not hit or hit.Instance == part or hit.Instance:IsDescendantOf(part.Parent) then
+                reachable = true
+            end
+        end
+
+        reachabilityCache[part] = {
+            Time = now,
+            Origin = root.Position,
+            Target = part.Position,
+            Value = reachable,
+        }
+        return reachable
+    end
+
+    local function isAvailableWorldItem(item)
+        if not isWorldItem(item) then return false end
+        local part = getPart(item)
+        if not part then return false end
+
+        local id = itemId(item)
+        local map = currentMapName()
+
+        if map == "House" and id == "WhiteKey" then
+            if requirementExists("RedGear") or requirementExists("GreenGear") then
+                return false
+            end
+        end
+
+        return computeReachable(part)
+    end
+
     local function book2ItemFrom(instance)
         if instance.Name == "ItemHandler" and instance.Parent then
             return instance.Parent
