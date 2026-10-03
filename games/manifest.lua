@@ -12,14 +12,20 @@ local games = {
     {Name = "Ink Game", Slug = "ink-game", PlaceIds = {99567941238278, 125009265613167}},
 }
 
-local Manifest = {Games = games}
+local byPlaceId = {}
+for _, entry in ipairs(games) do
+    for _, placeId in ipairs(entry.PlaceIds) do
+        byPlaceId[placeId] = entry
+    end
+end
+
+local Manifest = {
+    Games = games,
+    ByPlaceId = byPlaceId,
+}
 
 function Manifest.Find(placeId)
-    for _, entry in ipairs(games) do
-        if table.find(entry.PlaceIds, placeId) then
-            return entry
-        end
-    end
+    return byPlaceId[placeId]
 end
 
 return Manifest
