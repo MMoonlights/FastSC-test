@@ -13,6 +13,8 @@ return function(ctx)
     local doors = {}
     local bots = {}
     local visuals = {}
+    local requirements = {}
+    local escapeTargets = {}
     local selectedItem
     local infiniteJump = false
     local itemEsp = false
@@ -376,7 +378,16 @@ return function(ctx)
         if instance:IsA("ClickDetector") or instance:IsA("ProximityPrompt") then
             interactives[instance] = true
         end
+        if instance:IsA("StringValue") then
+            requirements[instance] = true
+        end
         if instance:IsA("BasePart") then
+            local lower = string.lower(instance.Name)
+            if string.find(lower, "escape", 1, true) or string.find(lower, "exit", 1, true) or string.find(lower, "final", 1, true) then
+                escapeTargets[instance] = true
+            elseif instance.DataCost == 25 and instance:FindFirstChildWhichIsA("Script") then
+                escapeTargets[instance] = true
+            end
             if hasAncestorName(instance, "trap") then traps[instance] = true end
             if hasAncestorName(instance, "door") or hasAncestorName(instance, "gate") then doors[instance] = true end
         elseif instance:IsA("Model") and isBotModel(instance) then
@@ -392,6 +403,9 @@ return function(ctx)
         traps[instance] = nil
         doors[instance] = nil
         bots[instance] = nil
+        requirements[instance] = nil
+        escapeTargets[instance] = nil
+        itemNameCache[instance] = nil
         local visual = visuals[instance]
         if visual then
             if visual.Highlight then pcall(function() visual.Highlight:Destroy() end) end
