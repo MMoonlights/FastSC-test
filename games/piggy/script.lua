@@ -150,6 +150,16 @@ return function(ctx)
     local automationActive = false
     local automationTarget
 
+    local function zeroCharacterVelocity(character)
+        if not character then return end
+        for _, part in ipairs(character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.AssemblyLinearVelocity = Vector3.zero
+                part.AssemblyAngularVelocity = Vector3.zero
+            end
+        end
+    end
+
     local function setAutomationCollision(enabled)
         local character = localPlayer.Character
         if not character then return end
@@ -173,8 +183,8 @@ return function(ctx)
         automationTarget = target
         setAutomationCollision(true)
         if humanoid then scope:Set(humanoid, "AutoRotate", false) end
-        root.AssemblyLinearVelocity = Vector3.zero
-        root.AssemblyAngularVelocity = Vector3.zero
+        zeroCharacterVelocity(character)
+        pcall(function() character:PivotTo(target) end)
         root.CFrame = target
         return true
     end
@@ -185,10 +195,7 @@ return function(ctx)
         local humanoid = character and character:FindFirstChildOfClass("Humanoid")
         automationTarget = nil
         automationActive = false
-        if root then
-            root.AssemblyLinearVelocity = Vector3.zero
-            root.AssemblyAngularVelocity = Vector3.zero
-        end
+        zeroCharacterVelocity(character)
         if humanoid then scope:Restore(humanoid, "AutoRotate") end
         if not noclip then setAutomationCollision(false) end
     end
@@ -198,9 +205,11 @@ return function(ctx)
         local character = localPlayer.Character
         local root = character and character:FindFirstChild("HumanoidRootPart")
         if not root then return end
-        root.AssemblyLinearVelocity = Vector3.zero
-        root.AssemblyAngularVelocity = Vector3.zero
-        if automationTarget then root.CFrame = automationTarget end
+        zeroCharacterVelocity(character)
+        if automationTarget then
+            pcall(function() character:PivotTo(automationTarget) end)
+            root.CFrame = automationTarget
+        end
         setAutomationCollision(true)
     end)
 
