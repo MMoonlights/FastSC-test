@@ -44,6 +44,8 @@ return function(ctx)
     local objectiveEsp = false
     local objectiveVisualTarget
     local autoCompleteBusy = false
+    local objectiveCooldowns = setmetatable({}, {__mode = "k"})
+    local disabledEnemyTouches = setmetatable({}, {__mode = "k"})
 
     local bookName = "Piggy universe"
     if game.PlaceId == 4623386862 then
@@ -829,6 +831,7 @@ return function(ctx)
                                 Target = target,
                                 Part = part,
                                 TargetName = readableTargetName(id, target),
+                                Requirement = value,
                             }
                         end
                     end
@@ -856,6 +859,8 @@ return function(ctx)
                     score = score + (objective.Part.Position - root.Position).Magnitude
                 end
             end
+            local cooldown = objective.Requirement and objectiveCooldowns[objective.Requirement]
+            if cooldown and cooldown > os.clock() then score = score + 50000 end
             if score < bestScore then
                 best = objective
                 bestScore = score
@@ -1009,7 +1014,9 @@ return function(ctx)
         end
         local required = equipRequired(objective.Id)
         if required then
-            activateObjective(objective)
+            if activateObjective(objective) and objective.Requirement then
+                objectiveCooldowns[objective.Requirement] = os.clock() + 1.5
+            end
         end
         refreshObjectiveState()
         autoCompleteBusy = false
@@ -1053,9 +1060,37 @@ return function(ctx)
         end
     end
 
+    local function disableEnemyTouchTransmitters(model)
+        if not model or not model.Parent then return end
+        for _, descendant in ipairs(model:GetDescendants()) do
+            if descendant:IsA("TouchTransmitter") and descendant.Parent and not disabledEnemyTouches[descendant] then
+                local parent = descendant.Parent
+                local ok = pcall(function() descendant.Parent = nil end)
+                if ok then disabledEnemyTouches[descendant] = parent end
+            end
+        end
+    end
+
+    local function restoreEnemyTouchTransmitters()
+        for transmitter, parent in pairs(disabledEnemyTouches) do
+            if transmitter and parent and parent.Parent then
+                pcall(function() transmitter.Parent = parent end)
+            end
+            disabledEnemyTouches[transmitter] = nil
+        end
+    end
+
     local function applyGodMode()
         if not godMode then return end
         setCharacterTouch(true)
+        for bot in pairs(bots) do
+            disableEnemyTouchTransmitters(bot)
+        end
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= localPlayer and player.Character and isPiggyPlayer(player) then
+                disableEnemyTouchTransmitters(player.Character)
+            end
+        end
     end
 
     scope:Connect(RunService.PreSimulation, applyGodMode)
@@ -1285,9 +1320,14 @@ return function(ctx)
         end)
         rage:CreateButton("Complete one objective pass", autoCompleteStep)
         rage:CreateSection("Bypasses")
-        rage:CreateToggle("God mode (bots only)", false, function(value)
+        rage:CreateToggle("God mode", false, function(value)
             godMode = value
-            setCharacterTouch(value)
+            if value then
+                applyGodMode()
+            else
+                setCharacterTouch(false)
+                restoreEnemyTouchTransmitters()
+            end
         end)
         rage:CreateToggle("Trap bypass", false, function(value)
             trapBypass = value
@@ -1345,6 +1385,7 @@ return function(ctx)
     scope:AddRestore(function()
         clearKind()
         setCharacterTouch(false)
+        restoreEnemyTouchTransmitters()
         restoreNoclip()
         applyTrapBypass(false)
         applyDoors(false)
