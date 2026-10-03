@@ -1,6 +1,7 @@
 local games = {
     {Name = "Da Hood", Slug = "da-hood", PlaceIds = {2788229376}, UniverseIds = {1008451066}, Modes = {"Default"}},
     {Name = "Piggy", Slug = "piggy", PlaceIds = {4623386862, 5661005779}, UniverseIds = {1516533665}, Modes = {"Legit", "Rage"}},
+    {Name = "Piggy: Intercity", Slug = "piggy-intercity", PlaceIds = {86852362398411, 94110244708490}, UniverseIds = {10000918243, 10058633242}, Modes = {"Legit", "Rage"}},
     {Name = "Arsenal", Slug = "arsenal", PlaceIds = {286090429}, UniverseIds = {111958650}, Modes = {"Default"}},
     {Name = "Murder Mystery 2", Slug = "mm2", PlaceIds = {142823291}, UniverseIds = {66654135}, Modes = {"Default"}},
     {Name = "Build A Boat For Treasure", Slug = "babft", PlaceIds = {537413528}, UniverseIds = {210851291}, Modes = {"Default"}},
