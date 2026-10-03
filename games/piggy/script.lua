@@ -866,22 +866,31 @@ return function(ctx)
     end
 
     local function findItemByName(name)
-        local root = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
-        local best
-        local bestDistance = math.huge
-        for item in pairs(items) do
-            if isAvailableWorldItem(item) and itemDisplayName(item) == name then
-                local part = getPart(item)
-                if part then
-                    local distance = root and (part.Position - root.Position).Magnitude or 0
-                    if distance < bestDistance then
-                        best = item
-                        bestDistance = distance
+        local id = aliases[token(name)]
+        local bucket = id and itemsById[id]
+        if bucket then
+            local root = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+            local best
+            local bestDistance = math.huge
+            for item in pairs(bucket) do
+                if isAvailableWorldItem(item) then
+                    local part = getPart(item)
+                    if part then
+                        local distance = root and (part.Position - root.Position).Magnitude or 0
+                        if distance < bestDistance then
+                            best = item
+                            bestDistance = distance
+                        end
                     end
                 end
             end
+            return best
         end
-        return best
+        for item in pairs(items) do
+            if isAvailableWorldItem(item) and itemDisplayName(item) == name then
+                return item
+            end
+        end
     end
 
     local function nearestItem()
@@ -1271,7 +1280,7 @@ return function(ctx)
         if not matched then return false end
 
         local part = getPart(host) or getPart(interactive)
-        if not part or not computeReachable(part) then return false end
+        if not part then return false end
         local cooldown = freeInteractionCooldowns[interactive]
         return not cooldown or cooldown <= os.clock()
     end
@@ -1314,7 +1323,6 @@ return function(ctx)
         freeInteractionCooldowns[best] = os.clock() + 0.8
         task.wait(0.06)
         endAutomationMove()
-        table.clear(reachabilityCache)
         return true
     end
 
@@ -1360,11 +1368,13 @@ return function(ctx)
     end
 
     local function findItemById(id)
+        local bucket = itemsById[id]
+        if not bucket then return nil, math.huge end
         local root = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
         local best
         local bestDistance = math.huge
-        for item in pairs(items) do
-            if isAvailableWorldItem(item) and itemId(item) == id then
+        for item in pairs(bucket) do
+            if isAvailableWorldItem(item) then
                 local part = getPart(item)
                 if part then
                     local distance = root and (part.Position - root.Position).Magnitude or 0
@@ -1373,8 +1383,12 @@ return function(ctx)
                         bestDistance = distance
                     end
                 end
+            elseif not isWorldItem(item) then
+                bucket[item] = nil
+                items[item] = nil
             end
         end
+        if next(bucket) == nil then itemsById[id] = nil end
         return best, bestDistance
     end
 
@@ -1491,24 +1505,17 @@ return function(ctx)
         currentObjective = objective
         if objectiveMapLabel then
             objectiveMapLabel:Set("Map: " .. currentMapName()
-                .. " | active objectives: " .. tostring(#objectives)
-                .. " | path checks: " .. tostring(reachabilityPending))
+                .. " | active objectives: " .. tostring(#objectives))
         end
         if objectiveCurrentLabel then objectiveCurrentLabel:Set(objectiveText(currentObjective)) end
         if objectiveNeededLabel then objectiveNeededLabel:Set(remainingText(objectives)) end
         if objectiveStatusLabel then
             if not currentObjective then
-                if reachabilityPending > 0 then
-                    objectiveStatusLabel:Set("Status: checking locked areas and item accessibility")
-                else
-                    objectiveStatusLabel:Set("Status: objectives clear, checking mechanics / escape")
-                end
+                objectiveStatusLabel:Set("Status: objectives clear, checking mechanics / escape")
             elseif findOwnedById(currentObjective.Id) then
                 objectiveStatusLabel:Set("Status: item owned, apply it to " .. currentObjective.TargetName)
             elseif findItemById(currentObjective.Id) then
                 objectiveStatusLabel:Set("Status: collect " .. currentObjective.ItemName .. " | pickup: " .. lastPickupStatus)
-            elseif reachabilityPending > 0 then
-                objectiveStatusLabel:Set("Status: checking access to " .. currentObjective.ItemName)
             else
                 objectiveStatusLabel:Set("Status: waiting for " .. currentObjective.ItemName .. " to unlock / spawn | pickup: " .. lastPickupStatus)
             end
@@ -1622,7 +1629,6 @@ return function(ctx)
             local objectives, objective = refreshObjectiveState()
 
             if #objectives == 0 then
-                if reachabilityPending > 0 then return end
                 if runFreeInteractionStep() then
                     task.wait(0.03)
                     refreshObjectiveState()
