@@ -553,7 +553,7 @@ return function(ctx)
         local item = itemObjectFrom(instance) or book2ItemFrom(instance)
         if item then
             itemNameCache[item] = nil
-            if isWorldItem(item) then
+            if isAvailableWorldItem(item) then
                 items[item] = true
             else
                 items[item] = nil
@@ -681,7 +681,7 @@ return function(ctx)
     refreshVisuals = function()
         if itemEsp then
             for item in pairs(items) do
-                if isWorldItem(item) then
+                if isAvailableWorldItem(item) then
                     tag(item, "Item", Color3.fromRGB(255, 210, 70), itemDisplayName(item))
                 else
                     items[item] = nil
@@ -764,7 +764,7 @@ return function(ctx)
     local function itemList()
         local list = {}
         for item in pairs(items) do
-            if isWorldItem(item) and getPart(item) then
+            if isAvailableWorldItem(item) and getPart(item) then
                 list[#list + 1] = item
             else
                 items[item] = nil
@@ -793,7 +793,7 @@ return function(ctx)
         local best
         local bestDistance = math.huge
         for item in pairs(items) do
-            if isWorldItem(item) and itemDisplayName(item) == name then
+            if isAvailableWorldItem(item) and itemDisplayName(item) == name then
                 local part = getPart(item)
                 if part then
                     local distance = root and (part.Position - root.Position).Magnitude or 0
@@ -812,7 +812,7 @@ return function(ctx)
         local best
         local bestDistance = math.huge
         for item in pairs(items) do
-            local part = isWorldItem(item) and getPart(item) or nil
+            local part = isAvailableWorldItem(item) and getPart(item) or nil
             if part then
                 local distance = (part.Position - root.Position).Magnitude
                 if distance < bestDistance then
@@ -837,6 +837,10 @@ return function(ctx)
         end
 
         expectedId = expectedId or itemId(item)
+        if not isAvailableWorldItem(item) then
+            lastPickupStatus = "item exists but is still locked or unreachable"
+            return false
+        end
         if expectedId and findOwnedById and findOwnedById(expectedId) then
             lastPickupStatus = "already owned"
             return true, findOwnedById(expectedId)
@@ -1041,7 +1045,7 @@ return function(ctx)
         local best
         local bestDistance = math.huge
         for item in pairs(items) do
-            if isWorldItem(item) and itemId(item) == id then
+            if isAvailableWorldItem(item) and itemId(item) == id then
                 local part = getPart(item)
                 if part then
                     local distance = root and (part.Position - root.Position).Magnitude or 0
