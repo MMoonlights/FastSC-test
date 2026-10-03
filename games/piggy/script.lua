@@ -275,6 +275,12 @@ return function(ctx)
         Battery = "Battery",
         Batteries = "Batteries",
         Remote = "Remote",
+        RemoteControl = "Remote Control",
+        Mop = "Mop",
+        ElevatorKey = "Elevator Key",
+        Presents = "Presents",
+        Dreidel = "Dreidel",
+        FencingSword = "Fencing Sword",
         Ladder = "Ladder",
         Shovel = "Shovel",
         Candle = "Candle",
@@ -310,6 +316,16 @@ return function(ctx)
         aliases[token(id)] = id
         aliases[token(display)] = id
     end
+
+    aliases[token("Remote")] = "RemoteControl"
+    aliases[token("TV Remote")] = "RemoteControl"
+    aliases[token("Remote Control")] = "RemoteControl"
+    aliases[token("Fencing Foil")] = "FencingSword"
+    aliases[token("Fencing Sword")] = "FencingSword"
+    aliases[token("Present")] = "Presents"
+    aliases[token("Presents")] = "Presents"
+    aliases[token("Elevator Key")] = "ElevatorKey"
+    aliases[token("Mop")] = "Mop"
 
     local function cleanAssetId(value)
         return tostring(value or ""):match("%d+") or ""
