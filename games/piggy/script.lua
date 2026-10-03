@@ -5,7 +5,6 @@ return function(ctx)
     local Players = game:GetService("Players")
     local UserInputService = game:GetService("UserInputService")
     local RunService = game:GetService("RunService")
-    local PathfindingService = game:GetService("PathfindingService")
     local Lighting = game:GetService("Lighting")
     local localPlayer = Players.LocalPlayer
     local items = {}
@@ -50,9 +49,9 @@ return function(ctx)
     local pickupBusy = false
     local objectiveCooldowns = setmetatable({}, {__mode = "k"})
     local disabledEnemyTouches = setmetatable({}, {__mode = "k"})
-    local reachabilityCache = setmetatable({}, {__mode = "k"})
     local freeInteractionCooldowns = setmetatable({}, {__mode = "k"})
     local objectiveMapLabel
+    local itemsById = {}
 
     local bookName = "Piggy universe"
     if game.PlaceId == 4623386862 then
@@ -481,93 +480,21 @@ return function(ctx)
         return false
     end
 
-    local reachabilityPending = 0
-
-    local function calculateReachable(part, origin)
-        if not part or not part.Parent then return false end
-        local character = localPlayer.Character
-        local offsets = {
-            Vector3.zero,
-            Vector3.new(0, -math.max(1, part.Size.Y * 0.5), 0),
-            Vector3.new(2.5, 0, 0),
-            Vector3.new(-2.5, 0, 0),
-            Vector3.new(0, 0, 2.5),
-            Vector3.new(0, 0, -2.5),
-        }
-
-        for _, offset in ipairs(offsets) do
-            local path = PathfindingService:CreatePath({
-                AgentRadius = 2,
-                AgentHeight = 5,
-                AgentCanJump = true,
-                AgentCanClimb = true,
-                WaypointSpacing = 4,
-            })
-            local ok = pcall(function()
-                path:ComputeAsync(origin, part.Position + offset)
-            end)
-            if ok and path.Status == Enum.PathStatus.Success then
-                return true
+    local function ancestorRequirementLocks(item)
+        local current = item.Parent
+        for _ = 1, 5 do
+            if not current or current == workspace then break end
+            for _, child in ipairs(current:GetChildren()) do
+                if child:IsA("StringValue") then
+                    local id = aliases[token(child.Value)]
+                    if id and requirementExists(id) then
+                        return true
+                    end
+                end
             end
+            current = current.Parent
         end
-
-        if (part.Position - origin).Magnitude <= 12 then
-            local parameters = RaycastParams.new()
-            parameters.FilterType = Enum.RaycastFilterType.Exclude
-            parameters.FilterDescendantsInstances = character and {character} or {}
-            local hit = workspace:Raycast(origin, part.Position - origin, parameters)
-            if not hit or hit.Instance == part or hit.Instance:IsDescendantOf(part.Parent) then
-                return true
-            end
-        end
-
         return false
-    end
-
-    local function computeReachable(part)
-        local character = localPlayer.Character
-        local root = character and character:FindFirstChild("HumanoidRootPart")
-        if not root or not part or not part.Parent then return false end
-
-        local now = os.clock()
-        local cached = reachabilityCache[part]
-        if cached then
-            if cached.Pending then return cached.Value == true end
-            if now - cached.Time < 0.8
-                and (cached.Origin - root.Position).Magnitude < 10
-                and (cached.Target - part.Position).Magnitude < 3 then
-                return cached.Value == true
-            end
-        end
-
-        local origin = root.Position
-        local target = part.Position
-        reachabilityCache[part] = {
-            Pending = true,
-            Time = now,
-            Origin = origin,
-            Target = target,
-            Value = cached and cached.Value or false,
-        }
-        reachabilityPending += 1
-
-        task.spawn(function()
-            local reachable = calculateReachable(part, origin)
-            if part and part.Parent then
-                reachabilityCache[part] = {
-                    Pending = false,
-                    Time = os.clock(),
-                    Origin = origin,
-                    Target = part.Position,
-                    Value = reachable,
-                }
-            else
-                reachabilityCache[part] = nil
-            end
-            reachabilityPending = math.max(0, reachabilityPending - 1)
-        end)
-
-        return cached and cached.Value == true or false
     end
 
     local function isAvailableWorldItem(item)
@@ -584,7 +511,42 @@ return function(ctx)
             end
         end
 
-        return computeReachable(part)
+        if ancestorRequirementLocks(item) then
+            return false
+        end
+
+        local click = item:FindFirstChildWhichIsA("ClickDetector", true)
+        local prompt = item:FindFirstChildWhichIsA("ProximityPrompt", true)
+        if prompt and not prompt.Enabled and not click then
+            return false
+        end
+
+        return true
+    end
+
+    local function indexItem(item)
+        if not item or not item.Parent or not isWorldItem(item) then return end
+        items[item] = true
+        local id = itemId(item)
+        local bucket = itemsById[id]
+        if not bucket then
+            bucket = setmetatable({}, {__mode = "k"})
+            itemsById[id] = bucket
+        end
+        bucket[item] = true
+    end
+
+    local function unindexItem(item)
+        local cached = itemNameCache[item]
+        local id = cached and cached.Id
+        items[item] = nil
+        if id then
+            local bucket = itemsById[id]
+            if bucket then
+                bucket[item] = nil
+                if next(bucket) == nil then itemsById[id] = nil end
+            end
+        end
     end
 
     local function book2ItemFrom(instance)
@@ -668,11 +630,10 @@ return function(ctx)
     local function register(instance)
         local item = itemObjectFrom(instance) or book2ItemFrom(instance)
         if item then
-            itemNameCache[item] = nil
             if isWorldItem(item) then
-                items[item] = true
+                indexItem(item)
             else
-                if not isWorldItem(item) then items[item] = nil end
+                unindexItem(item)
                 if removeVisual then removeVisual(item) end
             end
         end
@@ -699,7 +660,7 @@ return function(ctx)
     end
 
     local function unregister(instance)
-        items[instance] = nil
+        unindexItem(instance)
         interactives[instance] = nil
         traps[instance] = nil
         doors[instance] = nil
