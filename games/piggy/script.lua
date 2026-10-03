@@ -4,6 +4,7 @@ return function(ctx)
     local mode = ctx.Mode or "Legit"
     local Players = game:GetService("Players")
     local UserInputService = game:GetService("UserInputService")
+    local RunService = game:GetService("RunService")
     local Lighting = game:GetService("Lighting")
     local localPlayer = Players.LocalPlayer
     local items = {}
@@ -74,13 +75,37 @@ return function(ctx)
         end
     end
 
+    local function isPiggyPlayer(player)
+        local character = player and player.Character
+        local enemy = character and character:FindFirstChild("Enemy")
+        return enemy and enemy:IsA("BoolValue") and enemy.Value == true
+    end
+
     local function isBotModel(model)
         if not model or not model:IsA("Model") or Players:GetPlayerFromCharacter(model) then return false end
+        local piggyFolder = workspace:FindFirstChild("PiggyNPC")
+        if piggyFolder and model.Parent == piggyFolder then return true end
         local lower = string.lower(model.Name)
         if lower == "piggynpc" or string.find(lower, "piggy", 1, true) or string.find(lower, "bot", 1, true) then
-            return model:FindFirstChildOfClass("Humanoid") ~= nil or model:FindFirstChild("HumanoidRootPart") ~= nil
+            return model:FindFirstChildOfClass("Humanoid") ~= nil
+                or model:FindFirstChild("HumanoidRootPart") ~= nil
+                or model:FindFirstChild("Head") ~= nil
         end
         return false
+    end
+
+    local function registerPiggyFolder(folder)
+        if not folder or folder.Name ~= "PiggyNPC" then return end
+        for _, child in ipairs(folder:GetChildren()) do
+            if child:IsA("Model") then bots[child] = true end
+        end
+        scope:Connect(folder.ChildAdded, function(child)
+            if child:IsA("Model") then bots[child] = true end
+        end)
+        scope:Connect(folder.ChildRemoved, function(child)
+            bots[child] = nil
+            removeVisual(child)
+        end)
     end
 
     local function register(instance)
@@ -114,8 +139,31 @@ return function(ctx)
     end
 
     for _, instance in ipairs(workspace:GetDescendants()) do register(instance) end
+    registerPiggyFolder(workspace:FindFirstChild("PiggyNPC"))
+    scope:Connect(workspace.ChildAdded, registerPiggyFolder)
     scope:Connect(workspace.DescendantAdded, register)
     scope:Connect(workspace.DescendantRemoving, unregister)
+
+    local function attachPlayer(player)
+        if player == localPlayer then return end
+        local function watchCharacter(character)
+            local function watchEnemy(enemy)
+                if enemy.Name == "Enemy" and enemy:IsA("BoolValue") then
+                    scope:Connect(enemy:GetPropertyChangedSignal("Value"), function()
+                        if piggyEsp or playerEsp then refreshVisuals() end
+                    end)
+                end
+            end
+            local enemy = character:FindFirstChild("Enemy")
+            if enemy then watchEnemy(enemy) end
+            scope:Connect(character.ChildAdded, watchEnemy)
+        end
+        if player.Character then watchCharacter(player.Character) end
+        scope:Connect(player.CharacterAdded, watchCharacter)
+    end
+
+    for _, player in ipairs(Players:GetPlayers()) do attachPlayer(player) end
+    scope:Connect(Players.PlayerAdded, attachPlayer)
 
     local function removeVisual(object)
         local data = visuals[object]
@@ -176,8 +224,22 @@ return function(ctx)
             end
         end
         if piggyEsp then
+            local piggyFolder = workspace:FindFirstChild("PiggyNPC")
+            if piggyFolder then
+                for _, bot in ipairs(piggyFolder:GetChildren()) do
+                    if bot:IsA("Model") then
+                        bots[bot] = true
+                        tag(bot, "Piggy", Color3.fromRGB(255, 70, 80), "Piggy: " .. bot.Name)
+                    end
+                end
+            end
             for bot in pairs(bots) do
-                if bot.Parent then tag(bot, "Piggy", Color3.fromRGB(255, 70, 80), bot.Name) end
+                if bot.Parent then tag(bot, "Piggy", Color3.fromRGB(255, 70, 80), "Piggy: " .. bot.Name) end
+            end
+            for _, player in ipairs(Players:GetPlayers()) do
+                if player ~= localPlayer and player.Character and isPiggyPlayer(player) then
+                    tag(player.Character, "Piggy", Color3.fromRGB(255, 70, 80), "Piggy: " .. player.DisplayName)
+                end
             end
         end
         if trapEsp then
@@ -188,7 +250,11 @@ return function(ctx)
         if playerEsp then
             for _, player in ipairs(Players:GetPlayers()) do
                 if player ~= localPlayer and player.Character then
-                    tag(player.Character, "Player", Color3.fromRGB(80, 170, 255), player.DisplayName)
+                    if piggyEsp and isPiggyPlayer(player) then
+                        tag(player.Character, "Piggy", Color3.fromRGB(255, 70, 80), "Piggy: " .. player.DisplayName)
+                    else
+                        tag(player.Character, "Player", Color3.fromRGB(80, 170, 255), "Survivor: " .. player.DisplayName)
+                    end
                 end
             end
         end
@@ -354,11 +420,35 @@ return function(ctx)
         end
     end
 
+    local godParts = {
+        Head = true,
+        HumanoidRootPart = true,
+        UpperTorso = true,
+        LowerTorso = true,
+        Torso = true,
+        LeftFoot = true,
+        RightFoot = true,
+        LeftHand = true,
+        RightHand = true,
+        LeftLowerLeg = true,
+        RightLowerLeg = true,
+        LeftUpperLeg = true,
+        RightUpperLeg = true,
+        LeftLowerArm = true,
+        RightLowerArm = true,
+        LeftUpperArm = true,
+        RightUpperArm = true,
+        LeftArm = true,
+        RightArm = true,
+        LeftLeg = true,
+        RightLeg = true,
+    }
+
     local function setCharacterTouch(enabled)
         local character = localPlayer.Character
         if not character then return end
         for _, part in ipairs(character:GetDescendants()) do
-            if part:IsA("BasePart") then
+            if part:IsA("BasePart") and (godParts[part.Name] or part.Parent == character) then
                 if enabled then
                     scope:Set(part, "CanTouch", false)
                 else
@@ -367,6 +457,19 @@ return function(ctx)
             end
         end
     end
+
+    local function applyGodMode()
+    end
+
+    scope:Connect(RunService.PreSimulation, applyGodMode)
+    scope:Connect(localPlayer.CharacterAdded, function(character)
+        scope:Connect(character.DescendantAdded, function(instance)
+            if godMode and instance:IsA("BasePart") and (godParts[instance.Name] or instance.Parent == character) then
+                scope:Set(instance, "CanTouch", false)
+            end
+        end)
+        if godMode then task.defer(applyGodMode) end
+    end)
 
     local function applyNoclip()
         local character = localPlayer.Character
@@ -554,7 +657,7 @@ return function(ctx)
         end)
         rage:CreateButton("Complete one objective pass", autoCompleteStep)
         rage:CreateSection("Bypasses")
-        rage:CreateToggle("God mode", false, function(value)
+        rage:CreateToggle("God mode (bots only)", false, function(value)
             godMode = value
             setCharacterTouch(value)
         end)
