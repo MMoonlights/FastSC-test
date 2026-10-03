@@ -97,17 +97,22 @@ return function(ctx)
         "Mansion",
     }
 
-    local function currentMapName()
+    local function currentMapModel()
         for _, name in ipairs(mapNames) do
-            if workspace:FindFirstChild(name) then return name end
+            local map = workspace:FindFirstChild(name)
+            if map then return map, name end
         end
         for _, child in ipairs(workspace:GetChildren()) do
             local lower = string.lower(child.Name)
             for _, name in ipairs(mapNames) do
-                if lower == string.lower(name) then return name end
+                if lower == string.lower(name) then return child, name end
             end
         end
-        return "Unknown"
+    end
+
+    local function currentMapName()
+        local _, name = currentMapModel()
+        return name or "Unknown"
     end
 
     local function getPart(object)
@@ -1196,6 +1201,43 @@ return function(ctx)
         end
     end
 
+    local function readGlobalMapCode()
+        local map = currentMapModel()
+        if not map then return nil end
+
+        local found = {}
+        for _, descendant in ipairs(map:GetDescendants()) do
+            local lower = string.lower(descendant.Name)
+            local value
+            if descendant:IsA("StringValue") then
+                value = descendant.Value
+            elseif descendant:IsA("IntValue") or descendant:IsA("NumberValue") then
+                value = tostring(descendant.Value)
+            elseif descendant:IsA("TextLabel") or descendant:IsA("TextBox") then
+                value = descendant.Text
+            end
+
+            if value and (lower:find("code", 1, true)
+                or lower:find("password", 1, true)
+                or lower:find("pin", 1, true)
+                or lower:find("digit", 1, true)) then
+                local digits = tostring(value):gsub("%D", "")
+                if #digits >= 2 and #digits <= 8 then
+                    found[digits] = true
+                end
+            end
+        end
+
+        local only
+        local count = 0
+        for digits in pairs(found) do
+            only = digits
+            count += 1
+            if count > 1 then return nil end
+        end
+        return count == 1 and only or nil
+    end
+
     local function panelDigitButtons(host)
         local buttons = {}
         if not host then return buttons end
@@ -1227,7 +1269,7 @@ return function(ctx)
         if not (name:find("code", 1, true) or name:find("keypad", 1, true) or name:find("terminal", 1, true) or name:find("panel", 1, true)) then
             return false
         end
-        local code = readPanelCode(host)
+        local code = readPanelCode(host) or readGlobalMapCode()
         if not code then return false end
         local buttons = panelDigitButtons(host)
         for index = 1, #code do
