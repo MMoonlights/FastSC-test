@@ -48,7 +48,7 @@ end
 
 local function loadUI()
     local ok, result = pcall(function()
-        return loadstring(fetchUrl(uiUrl, "ui", 60), "@FastSC/UI")()
+        return loadstring(fetchUrl(uiUrl, "ui:v3", 60), "@FastSC/UI")()
     end)
     if ok and result then return result end
     if isfile and readfile and isfile(localPath("vendor/menus.lua")) then
@@ -170,6 +170,9 @@ local function createSettings(entry, mode)
     settings:CreateToggle("Auto mode", Config.Get("AutoMode", autoMode), function(value)
         autoMode = value
         Config.Set("AutoMode", value)
+    end)
+    settings:CreateToggle("Teleport reinject", Config.Get("TeleportReinject", true), function(value)
+        Config.Set("TeleportReinject", value)
     end)
 
     settings:CreateSection("Navigation")
