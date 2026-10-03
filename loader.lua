@@ -29,9 +29,7 @@ local function fetchUrl(url, key, ttl)
         lastError = result
         if attempt < 3 then task.wait(0.2 * attempt) end
     end
-    if cached and cached.Source then
-        return cached.Source
-    end
+    if cached and cached.Source then return cached.Source end
     error(lastError or ("Failed to fetch " .. url))
 end
 
@@ -70,28 +68,56 @@ local Common = module("core/common.lua")
 local Config = module("core/config.lua")
 local Manifest = module("games/manifest.lua")
 local Menu = loadUI()
-local entry = Manifest.Find(game.PlaceId)
 local scope = Runtime.new("root")
 
 Config.Load()
 
+local options = type(env.FastSCOptions) == "table" and env.FastSCOptions or {}
+local autoPlace = options.AutoPlace
+if autoPlace == nil then autoPlace = env.AutoPlace end
+if autoPlace == nil then autoPlace = Config.Get("AutoPlace", true) end
+
+local autoMode = options.AutoMode
+if autoMode == nil then autoMode = Config.Get("AutoMode", false) end
+
+local detectMethod = options.Detect or Config.Get("DetectMethod", "Auto")
+local forcedSlug = options.Game or options.Slug
+local forcedMode = options.Mode
+local themeName = Config.Get("Theme", "Crimson")
+local menuKeyName = Config.Get("MenuKey", "RightShift")
+local menuKey = Enum.KeyCode[menuKeyName] or Enum.KeyCode.RightShift
+
+Menu:SetTheme(themeName)
+
+local detectedEntry, detectedBy = Manifest.Find(game.PlaceId, game.GameId, detectMethod)
 local window = Menu:CreateWindow({
-    Title = entry and ("FastSC  |  " .. entry.Name) or "FastSC  |  Unsupported",
+    Title = "FastSC",
     Size = Vector2.new(620, 450),
-    ToggleKey = Enum.KeyCode.RightShift,
+    ToggleKey = menuKey,
     Logo = "F",
+    Theme = themeName,
 })
 
 local state = {
     Scope = scope,
     Window = window,
-    Entry = entry,
+    Entry = nil,
+    Mode = nil,
+    DetectedEntry = detectedEntry,
+    DetectedBy = detectedBy,
     Config = Config,
 }
 
+local function destroyGameScope()
+    if state.GameScope then
+        pcall(function() state.GameScope:Destroy() end)
+        state.GameScope = nil
+    end
+end
+
 function state.Unload()
     pcall(Config.Flush)
-    if state.GameScope then pcall(function() state.GameScope:Destroy() end) end
+    destroyGameScope()
     pcall(function() scope:Destroy() end)
     pcall(function() window:Destroy() end)
     if env.FastSCState == state then env.FastSCState = nil end
@@ -99,7 +125,7 @@ end
 
 env.FastSCState = state
 
-local function reload()
+local function reloadLoader()
     state.Unload()
     sourceCache["repo:loader.lua"] = nil
     local chunk, errorMessage = loadstring(source("loader.lua"), "@FastSC/loader.lua")
@@ -107,32 +133,70 @@ local function reload()
     chunk()
 end
 
-local home = window:CreateTab("Home", "F")
-home:CreateSection("Session")
-home:CreateLabel(entry and ("Detected: " .. entry.Name) or ("Unsupported PlaceId: " .. tostring(game.PlaceId)))
-home:CreateLabel("PlaceId: " .. tostring(game.PlaceId))
-home:CreateLabel("RightShift toggles the menu")
-home:CreateButton("Reload FastSC", reload)
-home:CreateButton("Unload", state.Unload)
+local showChooser
+local loadGame
 
-local settings = window:CreateTab("Settings", "S")
-settings:CreateSection("Loader")
-settings:CreateToggle("Teleport reinject", Config.Get("TeleportReinject", true), function(value)
-    Config.Set("TeleportReinject", value)
-end)
-settings:CreateButton("Clear source cache", function()
-    table.clear(sourceCache)
-    Common.Notify("FastSC", "Source cache cleared", 3)
-end)
-settings:CreateLabel("Remote sources use retry and a short cache; stale cached source is used only when fetching fails")
+local function createSettings(entry, mode)
+    local settings = window:CreateTab("Settings", "S")
+    settings:CreateSection("Session")
+    settings:CreateLabel("Game: " .. entry.Name)
+    settings:CreateLabel("Mode: " .. mode)
+    settings:CreateLabel("PlaceId: " .. tostring(game.PlaceId))
+    settings:CreateLabel("GameId / Universe: " .. tostring(game.GameId))
 
-local queue = queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport)
-if queue and Config.Get("TeleportReinject", true) then
-    pcall(queue, 'loadstring(game:HttpGet("' .. repo .. 'loader.lua"))()')
+    local activeKey = window:GetToggleKey()
+    settings:CreateKeybind("Menu bind", activeKey, function(key)
+        if key and key ~= activeKey then
+            activeKey = key
+            window:SetToggleKey(key)
+            Config.Set("MenuKey", key.Name)
+        end
+    end)
+
+    settings:CreateDropdown("Theme", Menu:GetThemes(), window:GetTheme(), function(value)
+        Config.Set("Theme", value)
+        window:SetTheme(value)
+    end)
+
+    settings:CreateSection("Detection")
+    settings:CreateToggle("AutoPlace", Config.Get("AutoPlace", autoPlace), function(value)
+        autoPlace = value
+        Config.Set("AutoPlace", value)
+    end)
+    settings:CreateDropdown("Detect by", {"Auto", "PlaceId", "GameId"}, Config.Get("DetectMethod", detectMethod), function(value)
+        detectMethod = value
+        Config.Set("DetectMethod", value)
+    end)
+    settings:CreateToggle("Auto mode", Config.Get("AutoMode", autoMode), function(value)
+        autoMode = value
+        Config.Set("AutoMode", value)
+    end)
+
+    settings:CreateSection("Navigation")
+    settings:CreateButton("Return to choose game", function()
+        showChooser(nil, true)
+    end)
+    if #(entry.Modes or {"Default"}) > 1 then
+        settings:CreateButton("Return to choose mode", function()
+            showChooser(entry, false)
+        end)
+    end
+    settings:CreateButton("Reload current", function()
+        loadGame(entry, mode)
+    end)
+    settings:CreateButton("Reload loader", reloadLoader)
+    settings:CreateButton("Unload", state.Unload)
 end
 
-if entry then
-    local gameScope = Runtime.new(entry.Slug)
+loadGame = function(entry, mode)
+    destroyGameScope()
+    window:ClearTabs()
+    state.Entry = entry
+    state.Mode = mode
+    Config.SetGame(entry.Slug, "LastMode", mode)
+    window:SetTitle("FastSC  |  " .. entry.Name .. (mode ~= "Default" and ("  |  " .. mode) or ""))
+
+    local gameScope = Runtime.new(entry.Slug .. "-" .. mode)
     state.GameScope = gameScope
     local context = {
         Window = window,
@@ -141,22 +205,90 @@ if entry then
         Common = Common,
         Config = Config,
         Entry = entry,
+        Mode = mode,
         Repo = repo,
-        Reload = reload,
+        ReturnToChooser = function()
+            showChooser(nil, true)
+        end,
+        ReturnToModes = function()
+            showChooser(entry, false)
+        end,
+        Reload = function()
+            loadGame(entry, mode)
+        end,
     }
+
     local ok, result = pcall(function()
         local gameModule = module("games/" .. entry.Slug .. "/script.lua")
         return gameModule(context)
     end)
+
+    createSettings(entry, mode)
+
     if not ok then
+        local errorTab = window:CreateTab("Error", "!")
+        errorTab:CreateSection("Module")
+        errorTab:CreateLabel(tostring(result))
         Common.Notify("FastSC", "Module error: " .. tostring(result), 8)
-        home:CreateLabel("Module error: " .. tostring(result))
+    end
+end
+
+showChooser = function(entry, forceGameList)
+    destroyGameScope()
+    window:ClearTabs()
+    state.Entry = nil
+    state.Mode = nil
+    window:SetTitle("FastSC  |  Choose")
+
+    local chooser = window:CreateTab("Choose", "F")
+
+    local function renderGames()
+        chooser:Clear()
+        chooser:CreateSection("Detected")
+        chooser:CreateLabel("PlaceId: " .. tostring(game.PlaceId))
+        chooser:CreateLabel("GameId / Universe: " .. tostring(game.GameId))
+        chooser:CreateLabel(detectedEntry and ("Detected: " .. detectedEntry.Name .. " via " .. tostring(detectedBy)) or "Detected: unsupported")
+        chooser:CreateSection("Games")
+        for _, gameEntry in ipairs(Manifest.Games) do
+            chooser:CreateButton(gameEntry.Name, function()
+                showChooser(gameEntry, false)
+            end)
+        end
+    end
+
+    if forceGameList or not entry then
+        renderGames()
+        return
+    end
+
+    chooser:CreateSection(entry.Name)
+    chooser:CreateLabel("Choose mode")
+    for _, mode in ipairs(entry.Modes or {"Default"}) do
+        chooser:CreateButton(mode, function()
+            loadGame(entry, mode)
+        end)
+    end
+    chooser:CreateButton("Back to games", renderGames)
+end
+
+local initialEntry = forcedSlug and Manifest.Get(forcedSlug) or detectedEntry
+
+if autoPlace and initialEntry then
+    local modes = initialEntry.Modes or {"Default"}
+    local preferredMode = forcedMode or Config.GetGame(initialEntry.Slug, "LastMode", modes[1])
+    if not Manifest.HasMode(initialEntry, preferredMode) then preferredMode = modes[1] end
+    if #modes == 1 or autoMode then
+        loadGame(initialEntry, preferredMode)
+    else
+        showChooser(initialEntry, false)
     end
 else
-    home:CreateSection("Supported games")
-    for _, gameEntry in ipairs(Manifest.Games) do
-        home:CreateLabel(gameEntry.Name .. "  |  " .. table.concat(gameEntry.PlaceIds, ", "))
-    end
+    showChooser(nil, true)
+end
+
+local queue = queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport)
+if queue and Config.Get("TeleportReinject", true) then
+    pcall(queue, 'loadstring(game:HttpGet("' .. repo .. 'loader.lua"))()')
 end
 
 return state
