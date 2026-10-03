@@ -238,13 +238,13 @@ return function(ctx)
             for _, item in ipairs(holder:GetDescendants()) do
                 if item.Name == "glasspart" and item:IsA("BasePart") then
                     if value then
-                        item.Color = item:GetAttribute("exploitingisevil") and Color3.fromRGB(255, 65, 65) or Color3.fromRGB(0, 255, 140)
-                        item.Transparency = 0
-                        item.Material = Enum.Material.ForceField
+                        scope:Set(item, "Color", item:GetAttribute("exploitingisevil") and Color3.fromRGB(255, 65, 65) or Color3.fromRGB(0, 255, 140))
+                        scope:Set(item, "Transparency", 0)
+                        scope:Set(item, "Material", Enum.Material.ForceField)
                     else
-                        item.Color = Color3.fromRGB(80, 80, 80)
-                        item.Transparency = 0.5
-                        item.Material = Enum.Material.Glass
+                        scope:Restore(item, "Color")
+                        scope:Restore(item, "Transparency")
+                        scope:Restore(item, "Material")
                     end
                 end
             end
@@ -288,11 +288,30 @@ return function(ctx)
     visual:CreateToggle("Bring NPCs to front", false, function(value) state.BringNPC = value end)
 
     playerTab:CreateSection("Movement")
-    playerTab:CreateToggle("WalkSpeed", false, function(value) state.WalkSpeed = value end)
+    playerTab:CreateToggle("WalkSpeed", false, function(value)
+        state.WalkSpeed = value
+        if not value then
+            local humanoid = localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid")
+            if humanoid then scope:Restore(humanoid, "WalkSpeed") end
+        end
+    end)
     playerTab:CreateSlider("WalkSpeed value", {Min = 1, Max = 100, Default = 16}, function(value) state.WalkSpeedValue = value end)
-    playerTab:CreateToggle("JumpPower", false, function(value) state.JumpPower = value end)
+    playerTab:CreateToggle("JumpPower", false, function(value)
+        state.JumpPower = value
+        if not value then
+            local humanoid = localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid")
+            if humanoid then scope:Restore(humanoid, "JumpPower") end
+        end
+    end)
     playerTab:CreateSlider("JumpPower value", {Min = 10, Max = 150, Default = 50}, function(value) state.JumpPowerValue = value end)
-    playerTab:CreateToggle("No clip", false, function(value) state.Noclip = value end)
+    playerTab:CreateToggle("No clip", false, function(value)
+        state.Noclip = value
+        if not value and localPlayer.Character then
+            for _, part in ipairs(localPlayer.Character:GetChildren()) do
+                if part:IsA("BasePart") then scope:Restore(part, "CanCollide") end
+            end
+        end
+    end)
     playerTab:CreateToggle("Touch fling", false, function(value) state.TouchFling = value end)
     playerTab:CreateToggle("Anti fling", false, function(value)
         state.AntiFling = value
@@ -389,7 +408,7 @@ return function(ctx)
         end
     end
 
-    scope:Connect(RunService.Heartbeat, function()
+    scope:Loop("runtime", 0.05, function()
         local character = localPlayer.Character
         local humanoid = character and character:FindFirstChildOfClass("Humanoid")
         local root = character and character:FindFirstChild("HumanoidRootPart")
@@ -397,15 +416,15 @@ return function(ctx)
         local activeCharacter = live and live:FindFirstChild(localPlayer.Name) or character
         local activeRoot = activeCharacter and activeCharacter:FindFirstChild("HumanoidRootPart")
 
-        if state.WalkSpeed and humanoid then humanoid.WalkSpeed = state.WalkSpeedValue end
-        if state.JumpPower and humanoid then humanoid.JumpPower = state.JumpPowerValue end
+        if state.WalkSpeed and humanoid then scope:Set(humanoid, "WalkSpeed", state.WalkSpeedValue) end
+        if state.JumpPower and humanoid then scope:Set(humanoid, "JumpPower", state.JumpPowerValue) end
         if state.Noclip and character then
-            for _, part in ipairs(character:GetDescendants()) do if part:IsA("BasePart") then part.CanCollide = false end end
+            for _, part in ipairs(character:GetChildren()) do if part:IsA("BasePart") then scope:Set(part, "CanCollide", false) end end
         end
         if state.AntiFling and root then
             if not safeCFrame then safeCFrame = root.CFrame end
             if (root.Position - safeCFrame.Position).Magnitude > 10 or root.AssemblyLinearVelocity.Magnitude > 150 then
-                root.CFrame = saffT4frame
+                root.CFrame = safeCFrame
                 root.AssemblyLinearVelocity = Vector3.zero
                 root.AssemblyAngularVelocity = Vector3.zero
             else
@@ -413,7 +432,7 @@ return function(ctx)
             end
         end
         if state.TouchFling and character then
-            for _, part in ipairs(character:GetDescendants()) do
+            for _, part in ipairs(character:GetChildren()) do
                 if part:IsA("BasePart") then
                     local velocity = part.AssemblyLinearVelocity
                     part.AssemblyLinearVelocity = Vector3.new(math.random(9999, 99999), math.random(9999, 99999), math.random(9999, 9999))
@@ -559,7 +578,7 @@ return function(ctx)
                             rebelObjects[model] = highlight
                         end
                     else
-                        if head then head.Size = Vector3.new(2, 1, 1) end
+                        if head then scope:Restore(head, "Size") end
                         clearRebel(model)
                     end
                     if state.BringNPC and targetRoot and root then
