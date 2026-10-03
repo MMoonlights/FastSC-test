@@ -41,6 +41,8 @@ return function(ctx)
     local objectiveNeededLabel
     local objectiveStatusLabel
     local currentObjective
+    local findOwnedById
+    local lastPickupStatus = "idle"
     local objectiveEsp = false
     local objectiveVisualTarget
     local autoCompleteBusy = false
@@ -644,20 +646,77 @@ return function(ctx)
         return best
     end
 
-    local function grabItem(item, returnAfter)
+    local function grabItem(item, returnAfter, expectedId)
+        if not item or not item.Parent then
+            lastPickupStatus = "item unavailable"
+            return false
+        end
+        expectedId = expectedId or itemId(item)
+        if expectedId and findOwnedById and findOwnedById(expectedId) then
+            lastPickupStatus = "already owned"
+            return true
+        end
+
         local part = getPart(item)
-        if not part then return false end
+        if not part then
+            lastPickupStatus = "item has no usable part"
+            return false
+        end
+
         local click, prompt = detectorFor(item)
-        if not click and not prompt then return false end
+        if not click and not prompt then
+            lastPickupStatus = "item has no pickup interaction"
+            return false
+        end
+
         local root = Common.Root()
         local old = root.CFrame
         root.CFrame = part.CFrame + Vector3.new(0, 2.5, 0)
-        task.wait(0.05)
-        if click and fireclickdetector then pcall(fireclickdetector, click) end
-        if prompt and fireproximityprompt then pcall(fireproximityprompt, prompt) end
         task.wait(0.08)
-        if returnAfter and root.Parent then root.CFrame = old end
-        return true
+
+        local function confirm(timeout)
+            local deadline = os.clock() + timeout
+            repeat
+                if expectedId and findOwnedById then
+                    local owned = findOwnedById(expectedId)
+                    if owned then return owned end
+                end
+                task.wait(0.05)
+            until os.clock() >= deadline
+        end
+
+        local owned
+        for attempt = 1, 2 do
+            if click and click.Parent and fireclickdetector then
+                pcall(fireclickdetector, click)
+            end
+            if prompt and prompt.Parent and fireproximityprompt then
+                pcall(fireproximityprompt, prompt)
+            end
+            owned = confirm(attempt == 1 and 0.8 or 1.1)
+            if owned then break end
+            if not item.Parent then break end
+            part = getPart(item)
+            if not part then break end
+            root.CFrame = part.CFrame + Vector3.new(0, 2.5, 0)
+            task.wait(0.08)
+        end
+
+        if returnAfter or not owned then
+            if root.Parent then root.CFrame = old end
+        end
+
+        if owned then
+            lastPickupStatus = "confirmed: " .. itemDisplayName(item)
+            return true, owned
+        end
+
+        if item.Parent then
+            lastPickupStatus = "pickup was not confirmed"
+        else
+            lastPickupStatus = "item disappeared before inventory confirmation"
+        end
+        return false
     end
 
     local function teleportItem(item)
@@ -796,14 +855,16 @@ return function(ctx)
         return best, bestDistance
     end
 
-    local function findOwnedById(id)
+    findOwnedById = function(id)
         local character = localPlayer.Character
         local backpack = localPlayer:FindFirstChild("Backpack")
         for _, container in ipairs({character, backpack}) do
             if container then
                 for _, object in ipairs(container:GetChildren()) do
-                    if object:IsA("Tool") or object:IsA("Model") or object:IsA("BasePart") then
-                        if itemId(object) == id or aliases[token(object.Name)] == id then
+                    if object:IsA("Tool") then
+                        local resolved = itemId(object)
+                        local alias = aliases[token(object.Name)]
+                        if resolved == id or alias == id then
                             return object
                         end
                     end
@@ -899,9 +960,9 @@ return function(ctx)
             elseif findOwnedById(currentObjective.Id) then
                 objectiveStatusLabel:Set("Status: item owned, apply it to " .. currentObjective.TargetName)
             elseif findItemById(currentObjective.Id) then
-                objectiveStatusLabel:Set("Status: collect " .. currentObjective.ItemName)
+                objectiveStatusLabel:Set("Status: collect " .. currentObjective.ItemName .. " | pickup: " .. lastPickupStatus)
             else
-                objectiveStatusLabel:Set("Status: waiting for " .. currentObjective.ItemName .. " to become available")
+                objectiveStatusLabel:Set("Status: waiting for " .. currentObjective.ItemName .. " to become available | pickup: " .. lastPickupStatus)
             end
         end
         return objectives, currentObjective
@@ -912,9 +973,11 @@ return function(ctx)
         if not object then
             local worldItem = findItemById(id)
             if worldItem then
-                grabItem(worldItem, false)
-                task.wait(0.15)
-                object = findOwnedById(id)
+                local picked = grabItem(worldItem, false, id)
+                if picked then
+                    task.wait(0.1)
+                    object = findOwnedById(id)
+                end
             end
         end
         local character = localPlayer.Character
@@ -1206,7 +1269,7 @@ return function(ctx)
         end)
         tab:CreateButton("Grab selected item", function()
             local item = selectedItem and findItemByName(selectedItem)
-            if item then grabItem(item, true) end
+            if item then grabItem(item, true, itemId(item)) end
         end)
         tab:CreateButton("Teleport to selected item", function()
             local item = selectedItem and findItemByName(selectedItem)
@@ -1214,7 +1277,7 @@ return function(ctx)
         end)
         tab:CreateButton("Grab nearest item", function()
             local item = nearestItem()
-            if item then grabItem(item, true) end
+            if item then grabItem(item, true, itemId(item)) end
         end)
     end
 
@@ -1299,7 +1362,7 @@ return function(ctx)
             if value then
                 scope:Loop("autoGrab", 0.2, function()
                     local item = nearestItem()
-                    if item then grabItem(item, false) end
+                    if item then grabItem(item, false, itemId(item)) end
                 end)
             else
                 scope:StopTask("autoGrab")
