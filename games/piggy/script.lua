@@ -147,6 +147,63 @@ return function(ctx)
         return item:IsDescendantOf(workspace)
     end
 
+    local automationActive = false
+    local automationTarget
+
+    local function setAutomationCollision(enabled)
+        local character = localPlayer.Character
+        if not character then return end
+        for _, part in ipairs(character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                if enabled then
+                    scope:Set(part, "CanCollide", false)
+                elseif not noclip then
+                    scope:Restore(part, "CanCollide")
+                end
+            end
+        end
+    end
+
+    local function beginAutomationMove(target)
+        local character = localPlayer.Character
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+        if not root then return false end
+        automationActive = true
+        automationTarget = target
+        setAutomationCollision(true)
+        if humanoid then scope:Set(humanoid, "AutoRotate", false) end
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.AssemblyAngularVelocity = Vector3.zero
+        root.CFrame = target
+        return true
+    end
+
+    local function endAutomationMove()
+        local character = localPlayer.Character
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+        automationTarget = nil
+        automationActive = false
+        if root then
+            root.AssemblyLinearVelocity = Vector3.zero
+            root.AssemblyAngularVelocity = Vector3.zero
+        end
+        if humanoid then scope:Restore(humanoid, "AutoRotate") end
+        if not noclip then setAutomationCollision(false) end
+    end
+
+    scope:Connect(RunService.PreSimulation, function()
+        if not automationActive then return end
+        local character = localPlayer.Character
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+        if not root then return end
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.AssemblyAngularVelocity = Vector3.zero
+        if automationTarget then root.CFrame = automationTarget end
+        setAutomationCollision(true)
+    end)
+
     local function hasAncestorName(instance, word)
         word = string.lower(word)
         local current = instance
