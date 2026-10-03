@@ -5,6 +5,7 @@ return function(ctx)
     local Players = game:GetService("Players")
     local UserInputService = game:GetService("UserInputService")
     local RunService = game:GetService("RunService")
+    local PathfindingService = game:GetService("PathfindingService")
     local Lighting = game:GetService("Lighting")
     local localPlayer = Players.LocalPlayer
     local items = {}
@@ -49,12 +50,64 @@ return function(ctx)
     local pickupBusy = false
     local objectiveCooldowns = setmetatable({}, {__mode = "k"})
     local disabledEnemyTouches = setmetatable({}, {__mode = "k"})
+    local reachabilityCache = setmetatable({}, {__mode = "k"})
+    local freeInteractionCooldowns = setmetatable({}, {__mode = "k"})
+    local objectiveMapLabel
 
     local bookName = "Piggy universe"
     if game.PlaceId == 4623386862 then
         bookName = "Book 1"
     elseif game.PlaceId == 5661005779 then
         bookName = "Book 2"
+    end
+
+    local mapNames = {
+        "House",
+        "Station",
+        "Gallery",
+        "Forest",
+        "School",
+        "Hospital",
+        "Metro",
+        "Carnival",
+        "City",
+        "Mall",
+        "Outpost",
+        "Plant",
+        "Alleys",
+        "Store",
+        "Refinery",
+        "SafePlace",
+        "The Safe Place",
+        "Sewers",
+        "Factory",
+        "Port",
+        "Ship",
+        "Docks",
+        "Temple",
+        "Camp",
+        "Lab",
+        "DistortedMemory",
+        "Distorted Memory",
+        "WinterHoliday",
+        "Winter Holiday",
+        "Heist",
+        "Distraction",
+        "Breakout",
+        "Mansion",
+    }
+
+    local function currentMapName()
+        for _, name in ipairs(mapNames) do
+            if workspace:FindFirstChild(name) then return name end
+        end
+        for _, child in ipairs(workspace:GetChildren()) do
+            local lower = string.lower(child.Name)
+            for _, name in ipairs(mapNames) do
+                if lower == string.lower(name) then return name end
+            end
+        end
+        return "Unknown"
     end
 
     local function getPart(object)
