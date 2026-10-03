@@ -77,16 +77,36 @@ return function(ctx)
         end
     end
 
+    local function trueFlag(container, name)
+        if not container then return false end
+        local value = container:FindFirstChild(name)
+        if value and value:IsA("BoolValue") then return value.Value == true end
+        local attribute = container:GetAttribute(name)
+        return attribute == true
+    end
+
     local function isPiggyPlayer(player)
         local character = player and player.Character
-        local enemy = character and character:FindFirstChild("Enemy")
-        return enemy and enemy:IsA("BoolValue") and enemy.Value == true
+        return trueFlag(character, "Enemy")
+            or trueFlag(player, "Enemy")
+            or trueFlag(character, "IsPiggy")
+            or trueFlag(player, "IsPiggy")
+            or trueFlag(character, "Piggy")
+            or trueFlag(player, "Piggy")
+    end
+
+    local function underPiggyFolder(instance)
+        local current = instance
+        while current and current ~= workspace do
+            if current.Name == "PiggyNPC" then return true end
+            current = current.Parent
+        end
+        return false
     end
 
     local function isBotModel(model)
         if not model or not model:IsA("Model") or Players:GetPlayerFromCharacter(model) then return false end
-        local piggyFolder = workspace:FindFirstChild("PiggyNPC")
-        if piggyFolder and model.Parent == piggyFolder then return true end
+        if underPiggyFolder(model) then return true end
         local lower = string.lower(model.Name)
         if lower == "piggynpc" or string.find(lower, "piggy", 1, true) or string.find(lower, "bot", 1, true) then
             return model:FindFirstChildOfClass("Humanoid") ~= nil
@@ -98,11 +118,20 @@ return function(ctx)
 
     local function registerPiggyFolder(folder)
         if not folder or folder.Name ~= "PiggyNPC" then return end
-        for _, child in ipairs(folder:GetChildren()) do
-            if child:IsA("Model") then bots[child] = true end
+        for _, child in ipairs(folder:GetDescendants()) do
+            if child:IsA("Model") and (child:FindFirstChildOfClass("Humanoid") or child:FindFirstChild("HumanoidRootPart") or child:FindFirstChild("Head")) then
+                bots[child] = true
+            end
         end
-        scope:Connect(folder.ChildAdded, function(child)
-            if child:IsA("Model") then bots[child] = true end
+        for _, child in ipairs(folder:GetChildren()) do
+            if child:IsA("Model") or child:IsA("BasePart") then bots[child] = true end
+        end
+        scope:Connect(folder.DescendantAdded, function(child)
+            if child:IsA("Model") and (child:FindFirstChildOfClass("Humanoid") or child:FindFirstChild("HumanoidRootPart") or child:FindFirstChild("Head")) then
+                bots[child] = true
+            elseif child.Parent == folder and child:IsA("BasePart") then
+                bots[child] = true
+            end
         end)
         scope:Connect(folder.ChildRemoved, function(child)
             bots[child] = nil
@@ -229,7 +258,13 @@ return function(ctx)
             local piggyFolder = workspace:FindFirstChild("PiggyNPC")
             if piggyFolder then
                 for _, bot in ipairs(piggyFolder:GetChildren()) do
-                    if bot:IsA("Model") then
+                    if bot:IsA("Model") or bot:IsA("BasePart") then
+                        bots[bot] = true
+                        tag(bot, "Piggy", Color3.fromRGB(255, 70, 80), "Piggy: " .. bot.Name)
+                    end
+                end
+                for _, bot in ipairs(piggyFolder:GetDescendants()) do
+                    if bot:IsA("Model") and (bot:FindFirstChildOfClass("Humanoid") or bot:FindFirstChild("HumanoidRootPart") or bot:FindFirstChild("Head")) then
                         bots[bot] = true
                         tag(bot, "Piggy", Color3.fromRGB(255, 70, 80), "Piggy: " .. bot.Name)
                     end
@@ -461,6 +496,8 @@ return function(ctx)
     end
 
     local function applyGodMode()
+        if not godMode then return end
+        setCharacterTouch(true)
     end
 
     scope:Connect(RunService.PreSimulation, applyGodMode)
