@@ -824,7 +824,7 @@ return function(ctx)
             if isAvailableWorldItem(item) and getPart(item) then
                 list[#list + 1] = item
             else
-                items[item] = nil
+                if not isWorldItem(item) then items[item] = nil end
                 if removeVisual then removeVisual(item) end
             end
         end
@@ -937,8 +937,9 @@ return function(ctx)
             for attempt = 1, 2 do
                 part = getPart(item)
                 if not part then break end
-                root.CFrame = part.CFrame + Vector3.new(0, 2.5, 0)
-                task.wait(0.08)
+                local target = part.CFrame + Vector3.new(0, 2.5, 0)
+                beginAutomationMove(target)
+                task.wait(0.025)
 
                 if useClick and click and click.Parent then
                     pcall(fireclickdetector, click)
@@ -946,18 +947,23 @@ return function(ctx)
                     pcall(fireproximityprompt, prompt)
                 end
 
-                owned = confirm(attempt == 1 and 0.9 or 1.2)
+                owned = confirm(attempt == 1 and 0.55 or 0.8)
                 if owned then break end
                 if not item.Parent then break end
             end
 
             if not owned then
-                owned = confirm(1.25)
+                owned = confirm(0.7)
             end
         end)
 
+        endAutomationMove()
         if returnAfter or not owned then
-            if root and root.Parent then root.CFrame = old end
+            if root and root.Parent then
+                root.CFrame = old
+                root.AssemblyLinearVelocity = Vector3.zero
+                root.AssemblyAngularVelocity = Vector3.zero
+            end
         end
 
         pickupBusy = false
@@ -1257,9 +1263,10 @@ return function(ctx)
         if not part then return false end
         local character = localPlayer.Character
         local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-        root.CFrame = part.CFrame + part.CFrame.LookVector * -2 + Vector3.new(0, 1.5, 0)
+        local target = part.CFrame + part.CFrame.LookVector * -2 + Vector3.new(0, 1.5, 0)
+        beginAutomationMove(target)
         if humanoid then humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end
-        task.wait(0.08)
+        task.wait(0.025)
         local fired = false
         if objective.Target:IsA("ClickDetector") and fireclickdetector then
             pcall(fireclickdetector, objective.Target)
@@ -1283,7 +1290,8 @@ return function(ctx)
         end
         local equipped = character and character:FindFirstChildWhichIsA("Tool")
         if equipped then pcall(function() equipped:Activate() end) end
-        task.wait(0.18)
+        task.wait(0.08)
+        endAutomationMove()
         return fired
     end
 
@@ -1313,13 +1321,15 @@ return function(ctx)
             end
         end
         if not best then return false end
-        root.CFrame = best.CFrame + Vector3.new(0, 2, 0)
-        task.wait(0.08)
+        beginAutomationMove(best.CFrame + Vector3.new(0, 2, 0))
+        task.wait(0.025)
         if firetouchinterest then Common.Touch(root, best) end
         local click = best:FindFirstChildWhichIsA("ClickDetector", true)
         local prompt = best:FindFirstChildWhichIsA("ProximityPrompt", true)
         if click and fireclickdetector then pcall(fireclickdetector, click) end
         if prompt and fireproximityprompt then pcall(fireproximityprompt, prompt) end
+        task.wait(0.05)
+        endAutomationMove()
         return true
     end
 
