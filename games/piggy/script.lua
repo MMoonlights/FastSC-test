@@ -37,6 +37,12 @@ return function(ctx)
     local completeCursor = 0
     local removeVisual
     local refreshVisuals
+    local objectiveCurrentLabel
+    local objectiveNeededLabel
+    local objectiveStatusLabel
+    local currentObjective
+    local objectiveEsp = false
+    local autoCompleteBusy = false
 
     local bookName = "Piggy universe"
     if game.PlaceId == 4623386862 then
@@ -679,28 +685,320 @@ return function(ctx)
         return list
     end
 
-    local function autoCompleteStep()
-        local list = interactiveList()
-        if #list > 0 then
-            for _ = 1, math.min(3, #list) do
-                completeCursor = completeCursor % #list + 1
-                triggerInteractive(list[completeCursor], false)
+    local targetNames = {
+        BlueKey = "Blue Door",
+        GreenKey = "Green Door",
+        RedKey = "Red Door",
+        OrangeKey = "Orange Door",
+        YellowKey = "Yellow Door",
+        PurpleKey = "Purple Door",
+        WhiteKey = "Front Door",
+        Wrench = "Power Panel",
+        Hammer = "Front Door",
+        KeyCode = "Number Lock",
+        BlueKeycard = "Blue Keycard Reader",
+        RedKeycard = "Red Keycard Reader",
+        OrangeKeycard = "Orange Keycard Reader",
+        GreenKeycard = "Green Keycard Reader",
+    }
+
+    local function idFromText(value)
+        local exact = aliases[token(value)]
+        if exact then return exact end
+        local compact = token(value)
+        for alias, id in pairs(aliases) do
+            if #alias >= 4 and compact:find(alias, 1, true) then return id end
+        end
+    end
+
+    local function belongsToItem(instance)
+        local current = instance
+        while current and current ~= workspace do
+            if items[current] then return true end
+            current = current.Parent
+        end
+        return false
+    end
+
+    local function targetFromRequirement(value)
+        local current = value.Parent
+        local fallback
+        for _ = 1, 5 do
+            if not current or current == workspace then break end
+            if items[current] then return nil end
+            if current:IsA("Model") or current:IsA("BasePart") then
+                local part = getPart(current)
+                if part then
+                    fallback = fallback or current
+                    local lower = string.lower(current.Name)
+                    local hasInteraction = current:FindFirstChildWhichIsA("ClickDetector", true)
+                        or current:FindFirstChildWhichIsA("ProximityPrompt", true)
+                    local isNamed = lower:find("door", 1, true)
+                        or lower:find("gate", 1, true)
+                        or lower:find("panel", 1, true)
+                        or lower:find("lock", 1, true)
+                        or lower:find("power", 1, true)
+                        or lower:find("safe", 1, true)
+                    local mesh = current:FindFirstChildWhichIsA("SpecialMesh", true)
+                    local eventMesh = mesh and cleanAssetId(mesh.MeshId) == "524497312"
+                    if hasInteraction or isNamed or eventMesh then return current end
+                end
+            end
+            current = current.Parent
+        end
+        return fallback
+    end
+
+    local function readableTargetName(id, target)
+        if targetNames[id] then return targetNames[id] end
+        if target then
+            local name = tostring(target.Name)
+            if name:find("%a") then
+                name = name:gsub("_", " "):gsub("(%l)(%u)", "%1 %2"):gsub("%s+", " ")
+                return name
             end
         end
-        local item = nearestItem()
-        if item then grabItem(item, false) end
-        local root = Common.Root()
-        for interactive in pairs(interactives) do
-            local parent = interactive.Parent
-            local part = getPart(interactive)
-            if parent and part then
-                local lower = string.lower(parent.Name .. " " .. part.Name)
-                if string.find(lower, "exit", 1, true) or string.find(lower, "escape", 1, true) or string.find(lower, "final", 1, true) then
-                    triggerInteractive(interactive, false)
-                    if firetouchinterest then Common.Touch(root, part) end
+        return "Objective"
+    end
+
+    local function findItemById(id)
+        local root = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+        local best
+        local bestDistance = math.huge
+        for item in pairs(items) do
+            if item.Parent and itemId(item) == id then
+                local part = getPart(item)
+                if part then
+                    local distance = root and (part.Position - root.Position).Magnitude or 0
+                    if distance < bestDistance then
+                        best = item
+                        bestDistance = distance
+                    end
                 end
             end
         end
+        return best, bestDistance
+    end
+
+    local function findOwnedById(id)
+        local character = localPlayer.Character
+        local backpack = localPlayer:FindFirstChild("Backpack")
+        for _, container in ipairs({character, backpack}) do
+            if container then
+                for _, object in ipairs(container:GetChildren()) do
+                    if object:IsA("Tool") or object:IsA("Model") or object:IsA("BasePart") then
+                        if itemId(object) == id or aliases[token(object.Name)] == id then
+                            return object
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    local function collectObjectives()
+        local result = {}
+        local seen = {}
+        for value in pairs(requirements) do
+            if value.Parent and not belongsToItem(value) then
+                local id = idFromText(value.Value)
+                if id then
+                    local target = targetFromRequirement(value)
+                    local part = target and getPart(target)
+                    if target and part then
+                        local key = tostring(target) .. ":" .. id
+                        if not seen[key] then
+                            seen[key] = true
+                            result[#result + 1] = {
+                                Id = id,
+                                ItemName = displayNames[id] or id:gsub("(%l)(%u)", "%1 %2"),
+                                Target = target,
+                                Part = part,
+                                TargetName = readableTargetName(id, target),
+                            }
+                        end
+                    end
+                end
+            end
+        end
+        return result
+    end
+
+    local function chooseObjective(objectives)
+        local root = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+        local best
+        local bestScore = math.huge
+        for _, objective in ipairs(objectives) do
+            local owned = findOwnedById(objective.Id)
+            local worldItem, worldDistance = findItemById(objective.Id)
+            local score
+            if owned then
+                score = 0
+            elseif worldItem then
+                score = 100 + (worldDistance or 0)
+            else
+                score = 100000
+                if root and objective.Part then
+                    score = score + (objective.Part.Position - root.Position).Magnitude
+                end
+            end
+            if score < bestScore then
+                best = objective
+                bestScore = score
+            end
+        end
+        return best, bestScore
+    end
+
+    local function objectiveText(objective)
+        if not objective then return "Current objective: none detected" end
+        return "Current objective: " .. objective.ItemName .. " -> " .. objective.TargetName
+    end
+
+    local function remainingText(objectives)
+        if #objectives == 0 then return "Items needed: none, exit is next" end
+        local names = {}
+        local seen = {}
+        for _, objective in ipairs(objectives) do
+            if not seen[objective.ItemName] then
+                seen[objective.ItemName] = true
+                names[#names + 1] = objective.ItemName
+            end
+        end
+        table.sort(names)
+        return "Items needed: " .. table.concat(names, ", ")
+    end
+
+    local function refreshObjectiveState()
+        local objectives = collectObjectives()
+        currentObjective = chooseObjective(objectives)
+        if objectiveCurrentLabel then objectiveCurrentLabel:Set(objectiveText(currentObjective)) end
+        if objectiveNeededLabel then objectiveNeededLabel:Set(remainingText(objectives)) end
+        if objectiveStatusLabel then
+            if not currentObjective then
+                objectiveStatusLabel:Set("Status: objectives clear, escape is next")
+            elseif findOwnedById(currentObjective.Id) then
+                objectiveStatusLabel:Set("Status: item owned, apply it to " .. currentObjective.TargetName)
+            elseif findItemById(currentObjective.Id) then
+                objectiveStatusLabel:Set("Status: collect " .. currentObjective.ItemName)
+            else
+                objectiveStatusLabel:Set("Status: waiting for " .. currentObjective.ItemName .. " to become available")
+            end
+        end
+        return objectives, currentObjective
+    end
+
+    local function equipRequired(id)
+        local object = findOwnedById(id)
+        if not object then
+            local worldItem = findItemById(id)
+            if worldItem then
+                grabItem(worldItem, false)
+                task.wait(0.15)
+                object = findOwnedById(id)
+            end
+        end
+        local character = localPlayer.Character
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+        if object and object:IsA("Tool") and humanoid and object.Parent ~= character then
+            humanoid:EquipTool(object)
+            task.wait(0.08)
+        end
+        return object
+    end
+
+    local function activateObjective(objective)
+        if not objective or not objective.Target or not objective.Target.Parent then return false end
+        local root = Common.Root()
+        local part = getPart(objective.Target)
+        if not part then return false end
+        local character = localPlayer.Character
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+        root.CFrame = part.CFrame + part.CFrame.LookVector * -2 + Vector3.new(0, 1.5, 0)
+        if humanoid then humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end
+        task.wait(0.08)
+        local fired = false
+        if objective.Target:IsA("ClickDetector") and fireclickdetector then
+            pcall(fireclickdetector, objective.Target)
+            fired = true
+        elseif objective.Target:IsA("ProximityPrompt") and fireproximityprompt then
+            pcall(fireproximityprompt, objective.Target)
+            fired = true
+        end
+        for _, descendant in ipairs(objective.Target:GetDescendants()) do
+            if descendant:IsA("ClickDetector") and fireclickdetector then
+                pcall(fireclickdetector, descendant)
+                fired = true
+            elseif descendant:IsA("ProximityPrompt") and fireproximityprompt then
+                pcall(fireproximityprompt, descendant)
+                fired = true
+            end
+        end
+        if firetouchinterest then
+            Common.Touch(root, part)
+            fired = true
+        end
+        local equipped = character and character:FindFirstChildWhichIsA("Tool")
+        if equipped then pcall(function() equipped:Activate() end) end
+        task.wait(0.18)
+        return fired
+    end
+
+    local function autoEscapeStep()
+        local root = Common.Root()
+        local best
+        local bestDistance = math.huge
+        for part in pairs(escapeTargets) do
+            if part.Parent then
+                local distance = (part.Position - root.Position).Magnitude
+                if distance < bestDistance then
+                    best = part
+                    bestDistance = distance
+                end
+            end
+        end
+        if not best then
+            for interactive in pairs(interactives) do
+                if interactive.Parent then
+                    local part = getPart(interactive)
+                    local name = string.lower((interactive.Parent and interactive.Parent.Name or "") .. " " .. (part and part.Name or ""))
+                    if part and (name:find("exit", 1, true) or name:find("escape", 1, true) or name:find("final", 1, true)) then
+                        best = part
+                        break
+                    end
+                end
+            end
+        end
+        if not best then return false end
+        root.CFrame = best.CFrame + Vector3.new(0, 2, 0)
+        task.wait(0.08)
+        if firetouchinterest then Common.Touch(root, best) end
+        local click = best:FindFirstChildWhichIsA("ClickDetector", true)
+        local prompt = best:FindFirstChildWhichIsA("ProximityPrompt", true)
+        if click and fireclickdetector then pcall(fireclickdetector, click) end
+        if prompt and fireproximityprompt then pcall(fireproximityprompt, prompt) end
+        return true
+    end
+
+    local function autoCompleteStep()
+        if autoCompleteBusy then return end
+        autoCompleteBusy = true
+        local objectives, objective = refreshObjectiveState()
+        if #objectives == 0 then
+            autoEscapeStep()
+            autoCompleteBusy = false
+            return
+        end
+        if not objective then
+            autoCompleteBusy = false
+            return
+        end
+        local required = equipRequired(objective.Id)
+        if required then
+            activateObjective(objective)
+        end
+        refreshObjectiveState()
+        autoCompleteBusy = false
     end
 
     local godParts = {
