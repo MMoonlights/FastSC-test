@@ -33,6 +33,8 @@ return function(ctx)
     local autoComplete = false
     local autoInteract = false
     local completeCursor = 0
+    local removeVisual
+    local refreshVisuals
 
     local bookName = "Piggy universe"
     if game.PlaceId == 4623386862 then
@@ -165,7 +167,7 @@ return function(ctx)
     for _, player in ipairs(Players:GetPlayers()) do attachPlayer(player) end
     scope:Connect(Players.PlayerAdded, attachPlayer)
 
-    local function removeVisual(object)
+    removeVisual = function(object)
         local data = visuals[object]
         if not data then return end
         if data.Highlight then pcall(function() data.Highlight:Destroy() end) end
@@ -217,7 +219,7 @@ return function(ctx)
         end
     end
 
-    local function refreshVisuals()
+    refreshVisuals = function()
         if itemEsp then
             for item in pairs(items) do
                 if item.Parent then tag(item, "Item", Color3.fromRGB(255, 210, 70), item.Name) end
