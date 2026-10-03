@@ -1445,20 +1445,44 @@ return function(ctx)
     end
 
     local function refreshObjectiveState()
-        local objectives = collectObjectives()
-        currentObjective = chooseObjective(objectives)
-        if objectiveMapLabel then objectiveMapLabel:Set("Map: " .. currentMapName() .. " | active objectives: " .. tostring(#objectives)) end
+        local ok, objectives, objective = pcall(function()
+            local found = collectObjectives()
+            local selected = chooseObjective(found)
+            return found, selected
+        end)
+
+        if not ok then
+            currentObjective = nil
+            if objectiveMapLabel then objectiveMapLabel:Set("Map: " .. currentMapName() .. " | scanner recovered") end
+            if objectiveCurrentLabel then objectiveCurrentLabel:Set("Current objective: scanner error") end
+            if objectiveNeededLabel then objectiveNeededLabel:Set("Items needed: retrying automatically") end
+            if objectiveStatusLabel then objectiveStatusLabel:Set("Status: " .. tostring(objectives)) end
+            return {}, nil
+        end
+
+        currentObjective = objective
+        if objectiveMapLabel then
+            objectiveMapLabel:Set("Map: " .. currentMapName()
+                .. " | active objectives: " .. tostring(#objectives)
+                .. " | path checks: " .. tostring(reachabilityPending))
+        end
         if objectiveCurrentLabel then objectiveCurrentLabel:Set(objectiveText(currentObjective)) end
         if objectiveNeededLabel then objectiveNeededLabel:Set(remainingText(objectives)) end
         if objectiveStatusLabel then
             if not currentObjective then
-                objectiveStatusLabel:Set("Status: objectives clear, escape is next")
+                if reachabilityPending > 0 then
+                    objectiveStatusLabel:Set("Status: checking locked areas and item accessibility")
+                else
+                    objectiveStatusLabel:Set("Status: objectives clear, checking mechanics / escape")
+                end
             elseif findOwnedById(currentObjective.Id) then
                 objectiveStatusLabel:Set("Status: item owned, apply it to " .. currentObjective.TargetName)
             elseif findItemById(currentObjective.Id) then
                 objectiveStatusLabel:Set("Status: collect " .. currentObjective.ItemName .. " | pickup: " .. lastPickupStatus)
+            elseif reachabilityPending > 0 then
+                objectiveStatusLabel:Set("Status: checking access to " .. currentObjective.ItemName)
             else
-                objectiveStatusLabel:Set("Status: waiting for " .. currentObjective.ItemName .. " to become available | pickup: " .. lastPickupStatus)
+                objectiveStatusLabel:Set("Status: waiting for " .. currentObjective.ItemName .. " to unlock / spawn | pickup: " .. lastPickupStatus)
             end
         end
         return objectives, currentObjective
@@ -1565,32 +1589,44 @@ return function(ctx)
     local function autoCompleteStep()
         if autoCompleteBusy then return end
         autoCompleteBusy = true
-        local objectives, objective = refreshObjectiveState()
-        if #objectives == 0 then
-            if runFreeInteractionStep() then
-                task.wait(0.05)
-                refreshObjectiveState()
-            else
-                autoEscapeStep()
+
+        local ok, errorMessage = pcall(function()
+            local objectives, objective = refreshObjectiveState()
+
+            if #objectives == 0 then
+                if reachabilityPending > 0 then return end
+                if runFreeInteractionStep() then
+                    task.wait(0.03)
+                    refreshObjectiveState()
+                else
+                    autoEscapeStep()
+                end
+                return
             end
-            autoCompleteBusy = false
-            return
-        end
-        if not objective then
-            autoCompleteBusy = false
-            return
-        end
-        local required = equipRequired(objective.Id)
-        if required then
-            if activateObjective(objective) and objective.Requirement then
-                objectiveCooldowns[objective.Requirement] = os.clock() + 0.6
-                table.clear(reachabilityCache)
+
+            if not objective then return end
+
+            local required = equipRequired(objective.Id)
+            if required then
+                if activateObjective(objective) and objective.Requirement then
+                    objectiveCooldowns[objective.Requirement] = os.clock() + 0.45
+                    table.clear(reachabilityCache)
+                end
+            elseif reachabilityPending == 0 then
+                runFreeInteractionStep()
             end
-        else
-            runFreeInteractionStep()
-        end
-        refreshObjectiveState()
+
+            refreshObjectiveState()
+        end)
+
         autoCompleteBusy = false
+
+        if not ok then
+            lastPickupStatus = "solver recovered: " .. tostring(errorMessage)
+            if objectiveStatusLabel then
+                objectiveStatusLabel:Set("Status: solver recovered from an error, retrying")
+            end
+        end
     end
 
     local godParts = {
