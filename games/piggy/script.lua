@@ -1062,6 +1062,127 @@ return function(ctx)
         return false
     end
 
+    local freeInteractionWords = {
+        "button",
+        "lever",
+        "switch",
+        "generator",
+        "valve",
+        "fuse",
+        "breaker",
+        "keypad",
+        "code",
+        "terminal",
+        "console",
+        "panel",
+        "crank",
+        "elevator",
+        "bridge",
+        "power",
+        "machine",
+        "control",
+        "handle",
+    }
+
+    local function interactionHost(interactive)
+        local current = interactive and interactive.Parent
+        local fallback = current
+        for _ = 1, 3 do
+            if not current or current == workspace then break end
+            if current:IsA("Model") then return current end
+            fallback = current
+            current = current.Parent
+        end
+        return fallback
+    end
+
+    local function hostRequiresItem(host)
+        if not host then return false end
+        for _, descendant in ipairs(host:GetDescendants()) do
+            if descendant:IsA("StringValue") and idFromText(descendant.Value) then
+                return true
+            end
+        end
+        return false
+    end
+
+    local function freeInteractionName(interactive)
+        local host = interactionHost(interactive)
+        local chunks = {}
+        local current = host
+        for _ = 1, 3 do
+            if not current or current == workspace then break end
+            chunks[#chunks + 1] = string.lower(current.Name)
+            current = current.Parent
+        end
+        return table.concat(chunks, " ")
+    end
+
+    local function isFreeProgressInteraction(interactive)
+        if not interactive or not interactive.Parent then return false end
+        if itemObjectFrom(interactive) or belongsToItem(interactive) then return false end
+        local host = interactionHost(interactive)
+        if not host or hostRequiresItem(host) then return false end
+        if playerCharacterAncestor(host) or underPiggyFolder(host) then return false end
+
+        local name = freeInteractionName(interactive)
+        if name:find("exit", 1, true) or name:find("escape", 1, true) or name:find("final", 1, true) then
+            return false
+        end
+
+        local matched = false
+        for _, word in ipairs(freeInteractionWords) do
+            if name:find(word, 1, true) then
+                matched = true
+                break
+            end
+        end
+        if not matched then return false end
+
+        local part = getPart(host) or getPart(interactive)
+        if not part or not computeReachable(part) then return false end
+        local cooldown = freeInteractionCooldowns[interactive]
+        return not cooldown or cooldown <= os.clock()
+    end
+
+    local function runFreeInteractionStep()
+        local root = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not root then return false end
+        local best
+        local bestPart
+        local bestDistance = math.huge
+
+        for interactive in pairs(interactives) do
+            if isFreeProgressInteraction(interactive) then
+                local host = interactionHost(interactive)
+                local part = getPart(host) or getPart(interactive)
+                if part then
+                    local distance = (part.Position - root.Position).Magnitude
+                    if distance < bestDistance then
+                        best = interactive
+                        bestPart = part
+                        bestDistance = distance
+                    end
+                end
+            end
+        end
+
+        if not best or not bestPart then return false end
+
+        beginAutomationMove(bestPart.CFrame + bestPart.CFrame.LookVector * -2 + Vector3.new(0, 1.5, 0))
+        task.wait(0.025)
+        if best:IsA("ClickDetector") and fireclickdetector then
+            pcall(fireclickdetector, best)
+        elseif best:IsA("ProximityPrompt") and fireproximityprompt then
+            pcall(fireproximityprompt, best)
+        end
+        freeInteractionCooldowns[best] = os.clock() + 0.8
+        task.wait(0.06)
+        endAutomationMove()
+        table.clear(reachabilityCache)
+        return true
+    end
+
     local function targetFromRequirement(value)
         local current = value.Parent
         local fallback
@@ -1219,6 +1340,7 @@ return function(ctx)
     local function refreshObjectiveState()
         local objectives = collectObjectives()
         currentObjective = chooseObjective(objectives)
+        if objectiveMapLabel then objectiveMapLabel:Set("Map: " .. currentMapName() .. " | active objectives: " .. tostring(#objectives)) end
         if objectiveCurrentLabel then objectiveCurrentLabel:Set(objectiveText(currentObjective)) end
         if objectiveNeededLabel then objectiveNeededLabel:Set(remainingText(objectives)) end
         if objectiveStatusLabel then
@@ -1338,7 +1460,12 @@ return function(ctx)
         autoCompleteBusy = true
         local objectives, objective = refreshObjectiveState()
         if #objectives == 0 then
-            autoEscapeStep()
+            if runFreeInteractionStep() then
+                task.wait(0.05)
+                refreshObjectiveState()
+            else
+                autoEscapeStep()
+            end
             autoCompleteBusy = false
             return
         end
@@ -1349,8 +1476,11 @@ return function(ctx)
         local required = equipRequired(objective.Id)
         if required then
             if activateObjective(objective) and objective.Requirement then
-                objectiveCooldowns[objective.Requirement] = os.clock() + 1.5
+                objectiveCooldowns[objective.Requirement] = os.clock() + 0.6
+                table.clear(reachabilityCache)
             end
+        else
+            runFreeInteractionStep()
         end
         refreshObjectiveState()
         autoCompleteBusy = false
@@ -1554,6 +1684,7 @@ return function(ctx)
 
     local function setupObjectiveHelper(tab)
         tab:CreateSection("Objective Helper")
+        objectiveMapLabel = tab:CreateLabel("Map: " .. currentMapName())
         objectiveCurrentLabel = tab:CreateLabel("Current objective: scanning...")
         objectiveNeededLabel = tab:CreateLabel("Items needed: scanning...")
         objectiveStatusLabel = tab:CreateLabel("Status: scanning map...")
