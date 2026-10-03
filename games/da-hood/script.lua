@@ -377,13 +377,19 @@ return function(ctx)
                 if direction.Magnitude > 0 then root.CFrame += direction.Unit * settings.FlySpeed end
             end
         end
+    end)
 
+    local function refreshHitboxes()
         for _, player in ipairs(Players:GetPlayers()) do
             if player ~= localPlayer and player.Character then
                 local enemyRoot = player.Character:FindFirstChild("HumanoidRootPart")
                 if enemyRoot then
                     if not oldHitboxes[enemyRoot] then
-                        oldHitboxes[enemyRoot] = {Size = enemyRoot.Size, Transparency = enemyRoot.Transparency, CanCollide = enemyRoot.CanCollide}
+                        oldHitboxes[enemyRoot] = {
+                            Size = enemyRoot.Size,
+                            Transparency = enemyRoot.Transparency,
+                            CanCollide = enemyRoot.CanCollide,
+                        }
                     end
                     if settings.Hitbox > 2 then
                         enemyRoot.Size = Vector3.new(settings.Hitbox, settings.Hitbox, settings.Hitbox)
@@ -398,27 +404,37 @@ return function(ctx)
                 end
             end
         end
+    end
 
-        if settings.PlayerESP then
-            for _, player in ipairs(Players:GetPlayers()) do
-                if player ~= localPlayer and player.Character then
-                    local character2 = player.Character
-                    local highlight = espHighlights[character2]
-                    if not highlight or not highlight.Parent then
-                        highlight = Instance.new("Highlight")
-                        highlight.Name = "FastSC_Player"
-                        highlight.Adornee = character2
-                        highlight.FillColor = Color3.fromRGB(230, 60, 80)
-                        highlight.FillTransparency = 0.65
-                        highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-                        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                        highlight.Parent = character2
-                        espHighlights[character2] = highlight
-                    end
+    local function refreshPlayerEsp()
+        if not settings.PlayerESP then return end
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= localPlayer and player.Character then
+                local character = player.Character
+                local highlight = espHighlights[character]
+                if not highlight or not highlight.Parent then
+                    highlight = Instance.new("Highlight")
+                    highlight.Name = "FastSC_Player"
+                    highlight.Adornee = character
+                    highlight.FillColor = Color3.fromRGB(230, 60, 80)
+                    highlight.FillTransparency = 0.65
+                    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+                    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                    highlight.Parent = character
+                    espHighlights[character] = highlight
                 end
             end
         end
-    end)
+        for character, highlight in pairs(espHighlights) do
+            if not character.Parent then
+                pcall(function() highlight:Destroy() end)
+                espHighlights[character] = nil
+            end
+        end
+    end
+
+    scope:Loop("hitboxRefresh", 0.15, refreshHitboxes)
+    scope:Loop("playerEspRefresh", 0.4, refreshPlayerEsp)
 
     scope:Connect(RunService.RenderStepped, function()
         local camera = workspace.CurrentCamera
