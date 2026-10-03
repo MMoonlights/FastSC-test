@@ -155,6 +155,34 @@ function Scope:UnbindRenderStep(name)
     self.RenderSteps[key] = nil
 end
 
+function Scope:HookNamecall(object, callback)
+    if not (getrawmetatable and setreadonly and getnamecallmethod and newcclosure) then return nil end
+    local meta = getrawmetatable(object)
+    local old = meta.__namecall
+    local active = true
+    local hooked
+    local ok = pcall(function()
+        hooked = newcclosure(function(target, ...)
+            return callback(old, target, getnamecallmethod(), ...)
+        end)
+        setreadonly(meta, false)
+        meta.__namecall = hooked
+        setreadonly(meta, true)
+    end)
+    if not ok then return nil end
+    local function restore()
+        if not active then return end
+        active = false
+        pcall(function()
+            setreadonly(meta, false)
+            if meta.__namecall == hooked then meta.__namecall = old end
+            setreadonly(meta, true)
+        end)
+    end
+    self:AddRestore(restore)
+    return restore
+end
+
 function Scope:Destroy()
     if not self.Alive then return end
     self.Alive = false
