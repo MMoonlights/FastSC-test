@@ -46,6 +46,7 @@ return function(ctx)
     local objectiveEsp = false
     local objectiveVisualTarget
     local autoCompleteBusy = false
+    local pickupBusy = false
     local objectiveCooldowns = setmetatable({}, {__mode = "k"})
     local disabledEnemyTouches = setmetatable({}, {__mode = "k"})
 
@@ -647,14 +648,19 @@ return function(ctx)
     end
 
     local function grabItem(item, returnAfter, expectedId)
+        if pickupBusy then
+            lastPickupStatus = "another pickup is still running"
+            return false
+        end
         if not item or not item.Parent then
             lastPickupStatus = "item unavailable"
             return false
         end
+
         expectedId = expectedId or itemId(item)
         if expectedId and findOwnedById and findOwnedById(expectedId) then
             lastPickupStatus = "already owned"
-            return true
+            return true, findOwnedById(expectedId)
         end
 
         local part = getPart(item)
@@ -664,57 +670,72 @@ return function(ctx)
         end
 
         local click, prompt = detectorFor(item)
-        if not click and not prompt then
-            lastPickupStatus = "item has no pickup interaction"
+        local useClick = click and click.Parent and fireclickdetector
+        local usePrompt = not useClick and prompt and prompt.Parent and fireproximityprompt
+        if not useClick and not usePrompt then
+            lastPickupStatus = "item has no supported pickup interaction"
             return false
         end
 
+        pickupBusy = true
         local root = Common.Root()
         local old = root.CFrame
-        root.CFrame = part.CFrame + Vector3.new(0, 2.5, 0)
-        task.wait(0.08)
 
         local function confirm(timeout)
             local deadline = os.clock() + timeout
             repeat
                 if expectedId and findOwnedById then
-                    local owned = findOwnedById(expectedId)
-                    if owned then return owned end
+                    local ownedTool = findOwnedById(expectedId)
+                    if ownedTool then return ownedTool end
                 end
                 task.wait(0.05)
             until os.clock() >= deadline
         end
 
         local owned
-        for attempt = 1, 2 do
-            if click and click.Parent and fireclickdetector then
-                pcall(fireclickdetector, click)
+        local success = pcall(function()
+            for attempt = 1, 2 do
+                part = getPart(item)
+                if not part then break end
+                root.CFrame = part.CFrame + Vector3.new(0, 2.5, 0)
+                task.wait(0.08)
+
+                if useClick and click and click.Parent then
+                    pcall(fireclickdetector, click)
+                elseif usePrompt and prompt and prompt.Parent then
+                    pcall(fireproximityprompt, prompt)
+                end
+
+                owned = confirm(attempt == 1 and 0.9 or 1.2)
+                if owned then break end
+                if not item.Parent then break end
             end
-            if prompt and prompt.Parent and fireproximityprompt then
-                pcall(fireproximityprompt, prompt)
+
+            if not owned then
+                owned = confirm(1.25)
             end
-            owned = confirm(attempt == 1 and 0.8 or 1.1)
-            if owned then break end
-            if not item.Parent then break end
-            part = getPart(item)
-            if not part then break end
-            root.CFrame = part.CFrame + Vector3.new(0, 2.5, 0)
-            task.wait(0.08)
-        end
+        end)
 
         if returnAfter or not owned then
-            if root.Parent then root.CFrame = old end
+            if root and root.Parent then root.CFrame = old end
+        end
+
+        pickupBusy = false
+
+        if not success then
+            lastPickupStatus = "pickup handler failed"
+            return false
         end
 
         if owned then
-            lastPickupStatus = "confirmed: " .. itemDisplayName(item)
+            lastPickupStatus = "confirmed: " .. (displayNames[expectedId] or tostring(expectedId))
             return true, owned
         end
 
         if item.Parent then
-            lastPickupStatus = "pickup was not confirmed"
+            lastPickupStatus = "server did not confirm pickup"
         else
-            lastPickupStatus = "item disappeared before inventory confirmation"
+            lastPickupStatus = "item despawned, but no Tool appeared in inventory"
         end
         return false
     end
@@ -1360,6 +1381,8 @@ return function(ctx)
         rage:CreateToggle("Auto grab items", false, function(value)
             autoGrab = value
             if value then
+                autoComplete = false
+                scope:StopTask("autoComplete")
                 scope:Loop("autoGrab", 0.2, function()
                     local item = nearestItem()
                     if item then grabItem(item, false, itemId(item)) end
@@ -1371,6 +1394,10 @@ return function(ctx)
         rage:CreateToggle("Auto interact", false, function(value)
             autoInteract = value
             if value then
+                autoComplete = false
+                autoGrab = false
+                scope:StopTask("autoComplete")
+                scope:StopTask("autoGrab")
                 scope:Loop("autoInteract", 0.2, function()
                     local list = interactiveList()
                     if #list == 0 then return end
