@@ -52,6 +52,8 @@ return function(ctx)
     local freeInteractionCooldowns = setmetatable({}, {__mode = "k"})
     local objectiveMapLabel
     local itemsById = {}
+    local itemIndexedId = setmetatable({}, {__mode = "k"})
+    local trackedItemSignals = setmetatable({}, {__mode = "k"})
     local requirementCounts = {}
     local requirementIdByValue = setmetatable({}, {__mode = "k"})
     local trackedRequirements = setmetatable({}, {__mode = "k"})
@@ -612,11 +614,25 @@ return function(ctx)
         return true
     end
 
+    local function removeIndexedBucket(item)
+        local id = itemIndexedId[item]
+        if not id then return end
+        local bucket = itemsById[id]
+        if bucket then
+            bucket[item] = nil
+            if next(bucket) == nil then itemsById[id] = nil end
+        end
+        itemIndexedId[item] = nil
+    end
+
     local function indexItem(item)
         if not item or not item.Parent or not isWorldItem(item) then return end
+        removeIndexedBucket(item)
+        itemNameCache[item] = nil
         items[item] = true
-        itemUiDirty = true
         local id = itemId(item)
+        itemIndexedId[item] = id
+        itemUiDirty = true
         local bucket = itemsById[id]
         if not bucket then
             bucket = setmetatable({}, {__mode = "k"})
@@ -626,16 +642,35 @@ return function(ctx)
     end
 
     local function unindexItem(item)
-        local cached = itemNameCache[item]
-        local id = cached and cached.Id
+        removeIndexedBucket(item)
         items[item] = nil
+        itemNameCache[item] = nil
         itemUiDirty = true
-        if id then
-            local bucket = itemsById[id]
-            if bucket then
-                bucket[item] = nil
-                if next(bucket) == nil then itemsById[id] = nil end
+    end
+
+    local function watchItemSignature(instance, item)
+        if trackedItemSignals[instance] then return end
+        trackedItemSignals[instance] = true
+
+        local function reclassify()
+            if item and item.Parent and isWorldItem(item) then
+                indexItem(item)
             end
+        end
+
+        if instance:IsA("SpecialMesh") then
+            scope:Connect(instance:GetPropertyChangedSignal("MeshId"), reclassify)
+            scope:Connect(instance:GetPropertyChangedSignal("TextureId"), reclassify)
+            scope:Connect(instance:GetPropertyChangedSignal("Scale"), reclassify)
+        elseif instance:IsA("MeshPart") then
+            scope:Connect(instance:GetPropertyChangedSignal("MeshId"), reclassify)
+            pcall(function()
+                scope:Connect(instance:GetPropertyChangedSignal("TextureID"), reclassify)
+            end)
+        elseif instance:IsA("ParticleEmitter") then
+            scope:Connect(instance:GetPropertyChangedSignal("Color"), reclassify)
+        elseif instance:IsA("StringValue") then
+            scope:Connect(instance:GetPropertyChangedSignal("Value"), reclassify)
         end
     end
 
@@ -720,6 +755,7 @@ return function(ctx)
     local function register(instance)
         local item = itemObjectFrom(instance) or book2ItemFrom(instance)
         if item then
+            watchItemSignature(instance, item)
             if isWorldItem(item) then
                 indexItem(item)
             else
