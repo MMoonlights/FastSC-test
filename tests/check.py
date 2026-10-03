@@ -138,9 +138,10 @@ for token in [
     "isWorldItem",
     "playerCharacterAncestor",
     'object:IsA("Tool")',
-    "PathfindingService",
     "isAvailableWorldItem",
-    "computeReachable",
+    "itemsById",
+    "ancestorRequirementLocks",
+    'scope:Loop("objectiveHelper", 0.1',
     "currentMapName",
     "House",
     "Station",
@@ -172,11 +173,7 @@ for token in [
     "endAutomationMove",
     "AssemblyLinearVelocity",
     "AssemblyAngularVelocity",
-    "reachabilityPending",
-    "calculateReachable",
-    "task.spawn",
     "scanner recovered",
-    "checking locked areas and item accessibility",
     "zeroCharacterVelocity",
     "character:PivotTo",
     "readGlobalMapCode",
@@ -191,6 +188,9 @@ for token in [
     assert token in piggy, token
 
 assert "scope:Connect(RunService.Heartbeat" not in piggy
+assert "PathfindingService" not in piggy
+assert "computeReachable" not in piggy
+assert "reachabilityPending" not in piggy
 
 intercity = texts["games/piggy-intercity/script.lua"]
 for token in [
