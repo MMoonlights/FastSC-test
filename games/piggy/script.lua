@@ -1644,9 +1644,8 @@ return function(ctx)
             if required then
                 if activateObjective(objective) and objective.Requirement then
                     objectiveCooldowns[objective.Requirement] = os.clock() + 0.45
-                    table.clear(reachabilityCache)
                 end
-            elseif reachabilityPending == 0 then
+            else
                 runFreeInteractionStep()
             end
 
@@ -2015,7 +2014,8 @@ return function(ctx)
         end
     end)
 
-    scope:Loop("objectiveHelper", 0.4, refreshObjectiveState)
+    task.defer(refreshObjectiveState)
+    scope:Loop("objectiveHelper", 0.1, refreshObjectiveState)
 
     scope:Loop("playerState", 0.05, function()
         local character = localPlayer.Character
