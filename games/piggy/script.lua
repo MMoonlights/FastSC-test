@@ -451,29 +451,20 @@ return function(ctx)
         return false
     end
 
-    local function computeReachable(part)
+    local reachabilityPending = 0
+
+    local function calculateReachable(part, origin)
+        if not part or not part.Parent then return false end
         local character = localPlayer.Character
-        local root = character and character:FindFirstChild("HumanoidRootPart")
-        if not root or not part or not part.Parent then return false end
-
-        local cached = reachabilityCache[part]
-        local now = os.clock()
-        if cached and now - cached.Time < 1.25 then
-            if (cached.Origin - root.Position).Magnitude < 10 and (cached.Target - part.Position).Magnitude < 3 then
-                return cached.Value
-            end
-        end
-
         local offsets = {
             Vector3.zero,
             Vector3.new(0, -math.max(1, part.Size.Y * 0.5), 0),
-            Vector3.new(3, 0, 0),
-            Vector3.new(-3, 0, 0),
-            Vector3.new(0, 0, 3),
-            Vector3.new(0, 0, -3),
+            Vector3.new(2.5, 0, 0),
+            Vector3.new(-2.5, 0, 0),
+            Vector3.new(0, 0, 2.5),
+            Vector3.new(0, 0, -2.5),
         }
 
-        local reachable = false
         for _, offset in ipairs(offsets) do
             local path = PathfindingService:CreatePath({
                 AgentRadius = 2,
@@ -483,32 +474,70 @@ return function(ctx)
                 WaypointSpacing = 4,
             })
             local ok = pcall(function()
-                path:ComputeAsync(root.Position, part.Position + offset)
+                path:ComputeAsync(origin, part.Position + offset)
             end)
             if ok and path.Status == Enum.PathStatus.Success then
-                reachable = true
-                break
+                return true
             end
         end
 
-        if not reachable and (part.Position - root.Position).Magnitude <= 12 then
-            local direction = part.Position - root.Position
+        if (part.Position - origin).Magnitude <= 12 then
             local parameters = RaycastParams.new()
             parameters.FilterType = Enum.RaycastFilterType.Exclude
-            parameters.FilterDescendantsInstances = {character}
-            local hit = workspace:Raycast(root.Position, direction, parameters)
+            parameters.FilterDescendantsInstances = character and {character} or {}
+            local hit = workspace:Raycast(origin, part.Position - origin, parameters)
             if not hit or hit.Instance == part or hit.Instance:IsDescendantOf(part.Parent) then
-                reachable = true
+                return true
             end
         end
 
+        return false
+    end
+
+    local function computeReachable(part)
+        local character = localPlayer.Character
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+        if not root or not part or not part.Parent then return false end
+
+        local now = os.clock()
+        local cached = reachabilityCache[part]
+        if cached then
+            if cached.Pending then return cached.Value == true end
+            if now - cached.Time < 0.8
+                and (cached.Origin - root.Position).Magnitude < 10
+                and (cached.Target - part.Position).Magnitude < 3 then
+                return cached.Value == true
+            end
+        end
+
+        local origin = root.Position
+        local target = part.Position
         reachabilityCache[part] = {
+            Pending = true,
             Time = now,
-            Origin = root.Position,
-            Target = part.Position,
-            Value = reachable,
+            Origin = origin,
+            Target = target,
+            Value = cached and cached.Value or false,
         }
-        return reachable
+        reachabilityPending += 1
+
+        task.spawn(function()
+            local reachable = calculateReachable(part, origin)
+            if part and part.Parent then
+                reachabilityCache[part] = {
+                    Pending = false,
+                    Time = os.clock(),
+                    Origin = origin,
+                    Target = part.Position,
+                    Value = reachable,
+                }
+            else
+                reachabilityCache[part] = nil
+            end
+            reachabilityPending = math.max(0, reachabilityPending - 1)
+        end)
+
+        return cached and cached.Value == true or false
     end
 
     local function isAvailableWorldItem(item)
