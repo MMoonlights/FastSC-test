@@ -1,0 +1,24 @@
+name: Luau validation
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Luau
+        run: |
+          curl -L --fail -o luau.zip https://github.com/luau-lang/luau/releases/download/0.741/luau-ubuntu.zip
+          unzip -q luau.zip -d .luau
+          chmod +x .luau/luau-compile
+      - name: Compile Luau
+        run: |
+          while IFS= read -r file; do
+            echo "Compiling $file"
+            .luau/luau-compile "$file" >/dev/null
+          done < <(find . -type f -name '*.lua' | sort)
+      - name: Static checks
+        run: python tests/check.py
