@@ -553,10 +553,10 @@ return function(ctx)
         local item = itemObjectFrom(instance) or book2ItemFrom(instance)
         if item then
             itemNameCache[item] = nil
-            if isAvailableWorldItem(item) then
+            if isWorldItem(item) then
                 items[item] = true
             else
-                items[item] = nil
+                if not isWorldItem(item) then items[item] = nil end
                 if removeVisual then removeVisual(item) end
             end
         end
@@ -684,8 +684,8 @@ return function(ctx)
                 if isAvailableWorldItem(item) then
                     tag(item, "Item", Color3.fromRGB(255, 210, 70), itemDisplayName(item))
                 else
-                    items[item] = nil
                     removeVisual(item)
+                    if not isWorldItem(item) then items[item] = nil end
                 end
             end
         end
@@ -820,7 +820,7 @@ return function(ctx)
                     bestDistance = distance
                 end
             else
-                items[item] = nil
+                if not isWorldItem(item) then items[item] = nil end
             end
         end
         return best
