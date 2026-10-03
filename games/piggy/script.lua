@@ -60,14 +60,38 @@ return function(ctx)
     local function getPart(object)
         if not object or not object.Parent then return nil end
         if object:IsA("BasePart") then return object end
+        if object:IsA("Tool") then
+            return object:FindFirstChild("Handle") or object:FindFirstChildWhichIsA("BasePart", true)
+        end
         if object:IsA("Model") then
             return object.PrimaryPart or object:FindFirstChild("HumanoidRootPart") or object:FindFirstChild("Head") or object:FindFirstChildWhichIsA("BasePart", true)
         end
         local parent = object.Parent
+        if parent and parent:IsA("Tool") then
+            return parent:FindFirstChild("Handle") or parent:FindFirstChildWhichIsA("BasePart", true)
+        end
         if parent and parent:IsA("BasePart") then return parent end
-        if parent and parent:IsA("Model") then
+        if parent and parent:IsA("Model") and not Players:GetPlayerFromCharacter(parent) then
             return parent.PrimaryPart or parent:FindFirstChildWhichIsA("BasePart", true)
         end
+    end
+
+    local function playerCharacterAncestor(instance)
+        local current = instance
+        while current and current ~= workspace do
+            if current:IsA("Model") and Players:GetPlayerFromCharacter(current) then
+                return current
+            end
+            current = current.Parent
+        end
+    end
+
+    local function isWorldItem(item)
+        if not item or not item.Parent then return false end
+        if playerCharacterAncestor(item) then return false end
+        local backpack = localPlayer:FindFirstChild("Backpack")
+        if backpack and item:IsDescendantOf(backpack) then return false end
+        return item:IsDescendantOf(workspace)
     end
 
     local function hasAncestorName(instance, word)
@@ -308,12 +332,16 @@ return function(ctx)
     end
 
     local function book2ItemFrom(instance)
-        if instance.Name == "ItemHandler" and instance.Parent then return instance.Parent end
-        if instance:IsA("Tool") and (instance:FindFirstChildWhichIsA("ProximityPrompt", true) or instance:FindFirstChildWhichIsA("ClickDetector", true)) then
+        if instance.Name == "ItemHandler" and instance.Parent then
+            return instance.Parent
+        end
+        local hasInteraction = instance:FindFirstChildWhichIsA("ProximityPrompt", true)
+            or instance:FindFirstChildWhichIsA("ClickDetector", true)
+        if instance:IsA("Tool") and hasInteraction then
             return instance
         end
-        if instance:IsA("Model") and (instance:FindFirstChildWhichIsA("ProximityPrompt", true) or instance:FindFirstChildWhichIsA("ClickDetector", true)) then
-            if instance:FindFirstChild("Handle") or aliases[token(instance.Name)] or not tostring(instance.Name):find("%a") then
+        if instance:IsA("Model") and hasInteraction then
+            if instance:FindFirstChild("Handle") or aliases[token(instance.Name)] then
                 return instance
             end
         end
@@ -384,8 +412,13 @@ return function(ctx)
     local function register(instance)
         local item = itemObjectFrom(instance) or book2ItemFrom(instance)
         if item then
-            items[item] = true
             itemNameCache[item] = nil
+            if isWorldItem(item) then
+                items[item] = true
+            else
+                items[item] = nil
+                if removeVisual then removeVisual(item) end
+            end
         end
         if instance:IsA("ClickDetector") or instance:IsA("ProximityPrompt") then
             interactives[instance] = true
@@ -508,7 +541,12 @@ return function(ctx)
     refreshVisuals = function()
         if itemEsp then
             for item in pairs(items) do
-                if item.Parent then tag(item, "Item", Color3.fromRGB(255, 210, 70), itemDisplayName(item)) end
+                if isWorldItem(item) then
+                    tag(item, "Item", Color3.fromRGB(255, 210, 70), itemDisplayName(item))
+                else
+                    items[item] = nil
+                    removeVisual(item)
+                end
             end
         end
         if piggyEsp then
@@ -586,10 +624,11 @@ return function(ctx)
     local function itemList()
         local list = {}
         for item in pairs(items) do
-            if item.Parent and getPart(item) then
+            if isWorldItem(item) and getPart(item) then
                 list[#list + 1] = item
             else
                 items[item] = nil
+                if removeVisual then removeVisual(item) end
             end
         end
         table.sort(list, function(a, b) return itemDisplayName(a) < itemDisplayName(b) end)
@@ -614,7 +653,7 @@ return function(ctx)
         local best
         local bestDistance = math.huge
         for item in pairs(items) do
-            if item.Parent and itemDisplayName(item) == name then
+            if isWorldItem(item) and itemDisplayName(item) == name then
                 local part = getPart(item)
                 if part then
                     local distance = root and (part.Position - root.Position).Magnitude or 0
@@ -633,7 +672,7 @@ return function(ctx)
         local best
         local bestDistance = math.huge
         for item in pairs(items) do
-            local part = getPart(item)
+            local part = isWorldItem(item) and getPart(item) or nil
             if part then
                 local distance = (part.Position - root.Position).Magnitude
                 if distance < bestDistance then
@@ -862,7 +901,7 @@ return function(ctx)
         local best
         local bestDistance = math.huge
         for item in pairs(items) do
-            if item.Parent and itemId(item) == id then
+            if isWorldItem(item) and itemId(item) == id then
                 local part = getPart(item)
                 if part then
                     local distance = root and (part.Position - root.Position).Magnitude or 0
