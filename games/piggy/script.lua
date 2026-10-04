@@ -386,7 +386,11 @@ return function(ctx)
                 WhiteKey = {Present = {"RedGear", "GreenGear"}},
             },
             Depends = {
-                WhiteKey = {"Hammer", "Wrench", "KeyCode"},
+                WhiteKey = {"RedGear", "GreenGear", "Hammer", "Wrench", "KeyCode"},
+            },
+            Priority = {
+                GreenKey = 10, RedKey = 20, BlueKey = 30, YellowKey = 35, OrangeKey = 40,
+                RedGear = 45, GreenGear = 45, Hammer = 55, Wrench = 56, KeyCode = 57, WhiteKey = 100,
             },
         },
         Station = {
@@ -395,10 +399,14 @@ return function(ctx)
             },
             Depends = {
                 WhiteKey = {"Hammer", "Wrench"},
-                Gas = {"Battery"},
+                Gas = {"Battery", "Hammer", "Wrench"},
             },
             Counters = {
                 Battery = 2,
+            },
+            Priority = {
+                GreenKey = 10, RedKey = 15, BlueKey = 20, OrangeKey = 25, YellowKey = 30,
+                Battery = 35, Plank = 40, Hammer = 45, Wrench = 46, WhiteKey = 60, Gas = 100,
             },
         },
         Gallery = {
@@ -408,6 +416,10 @@ return function(ctx)
             Depends = {
                 WhiteKey = {"RedEgg", "GreenEgg", "Hammer", "Wrench"},
             },
+            Priority = {
+                RedKey = 10, BlueKey = 15, GreenKey = 20, OrangeKey = 25, YellowKey = 30,
+                Plank = 35, Hammer = 40, Wrench = 41, RedEgg = 50, GreenEgg = 50, WhiteKey = 100,
+            },
         },
         Forest = {
             Gates = {
@@ -416,11 +428,21 @@ return function(ctx)
             Depends = {
                 WhiteKey = {"Torch", "Hammer", "Wrench"},
             },
+            Priority = {
+                GreenKey = 10, RedKey = 15, BlueKey = 20, OrangeKey = 25, YellowKey = 30,
+                Plank = 35, Hammer = 40, Wrench = 45, Torch = 50, WhiteKey = 100,
+            },
         },
         School = {
             Depends = {
+                RedGear = {"Book"},
                 GreenGear = {"Book"},
-                WhiteKey = {"RedGear", "GreenGear", "Hammer", "Wrench"},
+                WhiteKey = {"Book", "RedGear", "GreenGear", "Hammer", "Wrench"},
+            },
+            Priority = {
+                GreenKey = 10, BlueKey = 15, OrangeKey = 20, Book = 25,
+                RedGear = 35, GreenGear = 36, RedKey = 40, YellowKey = 45,
+                Hammer = 55, Wrench = 56, WhiteKey = 100,
             },
         },
         Hospital = {
@@ -428,7 +450,15 @@ return function(ctx)
                 WhiteKey = {Present = {"EmptyVial", "GreenVial", "PurpleVial"}},
             },
             Depends = {
-                WhiteKey = {"GreenVial", "PurpleVial", "Hammer", "Plank"},
+                WhiteKey = {"GreenVial", "PurpleVial", "Hammer"},
+            },
+            Counters = {
+                EmptyVial = 2,
+            },
+            Priority = {
+                GreenKeycard = 10, BlueKeycard = 15, RedKeycard = 20, OrangeKeycard = 25,
+                Hammer = 30, Plank = 35, EmptyVial = 40, GreenVial = 50, PurpleVial = 51,
+                YellowKey = 60, WhiteKey = 100,
             },
         },
         Metro = {
@@ -437,10 +467,14 @@ return function(ctx)
             },
             Depends = {
                 BlueKeycard = {"Coin"},
-                WhiteKey = {"BlueKeycard"},
+                WhiteKey = {"BlueKeycard", "Hammer", "Wrench"},
             },
             Counters = {
                 Coin = 2,
+            },
+            Priority = {
+                GreenKey = 10, RedKey = 15, BlueKey = 20, OrangeKey = 25,
+                Coin = 35, Hammer = 45, BlueKeycard = 55, Wrench = 60, WhiteKey = 100,
             },
         },
         Carnival = {
@@ -451,16 +485,23 @@ return function(ctx)
             Depends = {
                 Hammer = {"Mallet"},
                 KeyCode = {"WaterGun"},
-                WhiteKey = {"Hammer", "Wrench", "KeyCode"},
+                WhiteKey = {"OrangeKey", "Hammer", "Wrench", "KeyCode"},
+            },
+            Priority = {
+                BlueKey = 10, GreenKey = 15, RedKey = 20, YellowKey = 25, OrangeKey = 30,
+                Mallet = 35, Hammer = 40, Wrench = 45, WaterGun = 50, KeyCode = 55, WhiteKey = 100,
             },
         },
         City = {
             Gates = {
-                FireExtinguisher = {Present = {"Dynamite"}, Active = {"Dynamite"}},
                 KeyCode = {Active = {"FireExtinguisher", "Plank"}},
             },
             Depends = {
-                KeyCode = {"Dynamite", "FireExtinguisher", "Plank"},
+                KeyCode = {"FireExtinguisher", "Plank", "Wrench"},
+            },
+            Priority = {
+                GreenKeycard = 10, RedKeycard = 15, OrangeKeycard = 20, BlueKeycard = 25,
+                Plank = 35, FireExtinguisher = 40, Wrench = 45, Dynamite = 50, KeyCode = 100,
             },
         },
         Mall = {
@@ -468,10 +509,14 @@ return function(ctx)
                 WhiteKey = {Present = {"Coin"}},
             },
             Depends = {
-                WhiteKey = {"Coin", "Crowbar"},
+                WhiteKey = {"Coin", "Crowbar", "Wrench"},
             },
             Counters = {
                 Coin = 2,
+            },
+            Priority = {
+                BlueKey = 10, GreenKey = 15, OrangeKey = 20, RedKey = 25,
+                Wrench = 35, Crowbar = 40, Coin = 45, WhiteKey = 100,
             },
         },
         Outpost = {
@@ -485,6 +530,10 @@ return function(ctx)
                 TankBullet = {"Wrench"},
                 BlueKeycard = {"Gas", "TankBullet", "Wrench", "FireExtinguisher"},
             },
+            Priority = {
+                BlueKey = 10, GreenKey = 15, OrangeKey = 20, RedKey = 25, YellowKey = 30,
+                Wrench = 35, FireExtinguisher = 40, Gas = 50, TankBullet = 60, BlueKeycard = 100,
+            },
         },
         Plant = {
             Gates = {
@@ -494,7 +543,8 @@ return function(ctx)
                 Mallet = {Present = {"Coin"}},
             },
             Depends = {
-                PurpleVial = {"Battery"},
+                GreenVial = {"OrangeKeycard", "YellowKey", "Plank", "Hammer"},
+                PurpleVial = {"RedKey", "BlueKey", "Battery"},
                 Dynamite = {"GreenVial", "PurpleVial"},
                 WhiteKey = {"Torch"},
                 Mallet = {"Coin"},
@@ -503,10 +553,20 @@ return function(ctx)
                 Battery = 2,
                 Coin = 2,
             },
+            Priority = {
+                OrangeKeycard = 10, YellowKey = 15, Plank = 20, Hammer = 25, GreenVial = 30,
+                GreenKeycard = 35, RedKey = 40, BlueKey = 41, Battery = 45, PurpleVial = 50,
+                Dynamite = 60, Torch = 70, WhiteKey = 75, Coin = 80, Mallet = 90,
+            },
         },
         Alleys = {
             Depends = {
-                WhiteKey = {"Scissors", "Mop", "Screwdriver", "KeyCode"},
+                Screwdriver = {"YellowKey"},
+                WhiteKey = {"OrangeKey", "Scissors", "Mop", "Screwdriver", "PurpleKey", "KeyCode"},
+            },
+            Priority = {
+                OrangeKey = 10, Scissors = 15, BlueKey = 20, GreenKey = 25, RedKey = 30,
+                YellowKey = 35, Screwdriver = 40, Mop = 45, PurpleKey = 50, KeyCode = 60, WhiteKey = 100,
             },
         },
         Store = {
@@ -516,19 +576,38 @@ return function(ctx)
             Depends = {
                 YellowKey = {"RemoteControl"},
                 Ladder = {"YellowKey"},
+                Battery = {"Ladder"},
             },
             Counters = {
+                RemoteControl = 4,
                 Battery = 2,
+            },
+            Priority = {
+                GreenKey = 10, OrangeKey = 15, RedKey = 20, BlueKey = 25,
+                RemoteControl = 30, YellowKey = 40, Ladder = 45, Carrot = 50,
+                PurpleKey = 55, Battery = 100,
             },
         },
         Refinery = {
             Depends = {
-                WhiteKey = {"Scissors", "SmokeGrenade", "GreenKeycard", "Battery"},
+                Screwdriver = {"RedKey"},
+                WhiteKey = {"OrangeKey", "Scissors", "GreenKey", "Carrot"},
+            },
+            Priority = {
+                Scissors = 10, GreenKey = 15, BlueKey = 20, RedKey = 25, YellowKey = 30,
+                Screwdriver = 35, Carrot = 40, Battery = 45, GreenKeycard = 50,
+                SmokeGrenade = 55, OrangeKey = 60, PurpleKey = 65, WhiteKey = 100,
             },
         },
         SafePlace = {
             Depends = {
+                Hammer = {"Screwdriver", "Ladder"},
                 Blowtorch = {"FireExtinguisher", "Screwdriver", "Ladder"},
+                WhiteKey = {"YellowKey", "Hammer", "Blowtorch"},
+            },
+            Priority = {
+                Screwdriver = 10, Ladder = 15, RedKey = 20, YellowKey = 25,
+                FireExtinguisher = 30, Hammer = 35, PurpleKey = 40, Blowtorch = 50, WhiteKey = 100,
             },
         },
         Sewers = {
@@ -537,45 +616,88 @@ return function(ctx)
                 WhiteKey = {Present = {"Mop"}},
             },
             Depends = {
-                Mop = {"WhiteGear", "Screwdriver"},
+                Mop = {"GreenKey", "OrangeKey", "Plank", "WhiteGear", "Screwdriver", "YellowKey"},
                 WhiteKey = {"Mop", "Screwdriver"},
             },
             Counters = {
                 WhiteGear = 2,
+            },
+            Priority = {
+                GreenKey = 10, OrangeKey = 15, Plank = 20, Screwdriver = 25, WhiteGear = 30,
+                BlueKey = 40, YellowKey = 45, Mop = 50, RedKey = 55, WhiteKey = 100,
             },
         },
         Factory = {
             Counters = {
                 WoodenSword = 3,
             },
+            Priority = {
+                BlueKey = 10, GreenKey = 15, RedKey = 20, YellowKey = 25,
+                Ladder = 30, Scissors = 35, Shovel = 40, Axe = 45, FireExtinguisher = 50,
+                PurpleKey = 55, Screwdriver = 60, OrangeKey = 65, WoodenSword = 100,
+            },
         },
         Port = {
             Depends = {
-                GrapplingHook = {"YellowKey"},
+                GrapplingHook = {"RedKey"},
+                Battery = {"Plank", "GrapplingHook", "Shovel"},
             },
             Counters = {
                 Battery = 4,
+            },
+            Priority = {
+                RedKey = 10, BlueKey = 15, OrangeKey = 20, GreenKey = 25, PurpleKey = 30,
+                Plank = 35, YellowKey = 40, GrapplingHook = 45, Shovel = 50, Battery = 100,
             },
         },
         Ship = {
             Depends = {
                 WhiteKey = {"Screwdriver", "Wrench"},
             },
+            Priority = {
+                BlueKey = 10, GreenKey = 15, OrangeKey = 20, RedKey = 25, PurpleKey = 30,
+                Screwdriver = 35, Wrench = 40, YellowKey = 45, WhiteKey = 100,
+            },
         },
         Docks = {
             Depends = {
-                WhiteKey = {"Candle", "Hammer", "Plank"},
+                Plank = {"Hammer"},
+                WhiteKey = {"GreenKey", "Hammer", "Plank", "Candle"},
+            },
+            Priority = {
+                BlueKey = 10, GreenKey = 15, OrangeKey = 20, RedKey = 25,
+                Hammer = 30, Plank = 35, Candle = 40, YellowKey = 45, WhiteKey = 100,
             },
         },
         Temple = {
             Depends = {
-                WhiteKey = {"Candle", "Shovel", "Hammer", "Plank"},
+                Hammer = {"RedKey"},
+                Plank = {"Hammer"},
+                WhiteKey = {"Shovel", "Hammer", "Plank", "Candle"},
+            },
+            Priority = {
+                BlueKey = 10, GreenKey = 15, OrangeKey = 20, RedKey = 25,
+                Shovel = 30, YellowKey = 35, Hammer = 40, Plank = 45, Candle = 50, WhiteKey = 100,
             },
         },
-        Camp = {},
+        Camp = {
+            Depends = {
+                ElevatorKey = {"RedKey"},
+            },
+            Priority = {
+                GreenKey = 10, OrangeKey = 15, BlueKey = 20, RedKey = 25,
+                Ladder = 30, Shovel = 35, PurpleKey = 40, TNT = 45, Rope = 50,
+                YellowKey = 55, ElevatorKey = 100,
+            },
+        },
         Lab = {
             Depends = {
                 BlueKeycard = {"Wrench"},
+            },
+            Priority = {
+                GreenKey = 10, PurpleKey = 15, YellowKey = 20, Wrench = 25,
+                BlueKey = 30, RedKeycard = 35, OrangeKeycard = 40, BlueKeycard = 45,
+                Dynamite = 60, Screwdriver = 65, Hammer = 70, Mop = 75, WoodenSword = 80,
             },
         },
     }
