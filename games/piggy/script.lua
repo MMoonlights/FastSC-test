@@ -1698,6 +1698,130 @@ return function(ctx)
         return table.concat(chunks, " ")
     end
 
+    local function shortValue(instance)
+        if instance:IsA("StringValue") then
+            return tostring(instance.Value)
+        end
+        if instance:IsA("IntValue") or instance:IsA("NumberValue") then
+            return tostring(instance.Value)
+        end
+        if instance:IsA("TextLabel") or instance:IsA("TextBox") then
+            return tostring(instance.Text)
+        end
+    end
+
+    local function normalizedShortValue(instance)
+        local value = shortValue(instance)
+        if not value then return nil end
+        value = value:gsub("^%s+", ""):gsub("%s+$", "")
+        if #value == 0 or #value > 16 then return nil end
+        return value
+    end
+
+    local function ancestorText(instance, depth)
+        local chunks = {}
+        local current = instance
+        for _ = 1, depth or 4 do
+            if not current or current == workspace then break end
+            chunks[#chunks + 1] = string.lower(current.Name)
+            current = current.Parent
+        end
+        return table.concat(chunks, " ")
+    end
+
+    local function puzzleControlHost(instance)
+        local current = instance and instance.Parent
+        local fallback = current
+        for _ = 1, 4 do
+            if not current or current == workspace then break end
+            fallback = current
+            local text = string.lower(current.Name)
+            if text:find("code", 1, true)
+                or text:find("puzzle", 1, true)
+                or text:find("panel", 1, true)
+                or text:find("wheel", 1, true)
+                or text:find("roman", 1, true)
+                or text:find("lever", 1, true)
+                or text:find("circle", 1, true)
+                or text:find("switch", 1, true)
+                or text:find("keypad", 1, true) then
+                return current
+            end
+            current = current.Parent
+        end
+        return fallback
+    end
+
+    local function clickControl(control)
+        if not control or not control.Parent then return false end
+        if control:IsA("ClickDetector") and fireclickdetector then
+            pcall(fireclickdetector, control)
+            return true
+        end
+        if control:IsA("ProximityPrompt") and fireproximityprompt then
+            pcall(fireproximityprompt, control)
+            return true
+        end
+        return false
+    end
+
+    local function collectMapControls(keywords)
+        local map = currentMapModel()
+        local result = {}
+        local seen = {}
+        if not map then return result end
+        for _, descendant in ipairs(map:GetDescendants()) do
+            if descendant:IsA("ClickDetector") or descendant:IsA("ProximityPrompt") then
+                local text = ancestorText(descendant, 5)
+                local matched = false
+                for _, keyword in ipairs(keywords) do
+                    if text:find(keyword, 1, true) then
+                        matched = true
+                        break
+                    end
+                end
+                if matched and not seen[descendant] then
+                    seen[descendant] = true
+                    result[#result + 1] = descendant
+                end
+            end
+        end
+        return result
+    end
+
+    local function progressionFingerprint()
+        local chunks = {currentMapName()}
+        local req = {}
+        for value in pairs(requirements) do
+            if value.Parent then
+                req[#req + 1] = tostring(value.Value) .. "@" .. tostring(value.Parent)
+            end
+        end
+        table.sort(req)
+        chunks[#chunks + 1] = table.concat(req, "|")
+        local itemIds = {}
+        for id, bucket in pairs(itemsById) do
+            local count = 0
+            for item in pairs(bucket) do
+                if isWorldItem(item) then count += 1 end
+            end
+            itemIds[#itemIds + 1] = tostring(id) .. ":" .. tostring(count)
+        end
+        table.sort(itemIds)
+        chunks[#chunks + 1] = table.concat(itemIds, "|")
+        chunks[#chunks + 1] = tostring(#workspace:GetChildren())
+        return table.concat(chunks, "#")
+    end
+
+    local function waitForProgress(before, timeout)
+        local deadline = os.clock() + (timeout or 0.35)
+        repeat
+            if progressionFingerprint() ~= before then return true end
+            task.wait(0.03)
+        until os.clock() >= deadline
+        return false
+    end
+
     local function readPanelCode(host)
         if not host then return nil end
         for _, descendant in ipairs(host:GetDescendants()) do
