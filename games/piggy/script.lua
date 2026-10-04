@@ -281,7 +281,15 @@ return function(ctx)
         WhiteGear = "White Gear",
         RedEgg = "Red Egg",
         GreenEgg = "Green Egg",
+        BlueEgg = "Blue Egg",
         KeyCode = "Key Code",
+        Coin = "Coin",
+        Torch = "Torch",
+        Mirror = "Mirror",
+        PurpleVial = "Purple Vial",
+        TankBullet = "Tank Bullet",
+        Apple = "Apple",
+        Rose = "Rose",
         WaterGun = "Water Gun",
         FireExtinguisher = "Fire Extinguisher",
         SmokeBomb = "Smoke Bomb",
@@ -356,6 +364,206 @@ return function(ctx)
     aliases[token("Presents")] = "Presents"
     aliases[token("Elevator Key")] = "ElevatorKey"
     aliases[token("Mop")] = "Mop"
+    aliases[token("Pink Vial")] = "PurpleVial"
+    aliases[token("Purple Vial")] = "PurpleVial"
+    aliases[token("Gasoline")] = "Gas"
+    aliases[token("Gas Can")] = "Gas"
+    aliases[token("Gas Canister")] = "Gas"
+    aliases[token("Tank Shell")] = "TankBullet"
+    aliases[token("Tank Bullet")] = "TankBullet"
+    aliases[token("Cannon Shell")] = "TankBullet"
+    aliases[token("Coin")] = "Coin"
+    aliases[token("Token")] = "Coin"
+    aliases[token("Torch")] = "Torch"
+    aliases[token("Mirror")] = "Mirror"
+    aliases[token("Red Egg")] = "RedEgg"
+    aliases[token("Green Egg")] = "GreenEgg"
+    aliases[token("Blue Egg")] = "BlueEgg"
+
+    local mapProfiles = {
+        House = {
+            Gates = {
+                WhiteKey = {Present = {"RedGear", "GreenGear"}},
+            },
+            Depends = {
+                WhiteKey = {"Hammer", "Wrench", "KeyCode"},
+            },
+        },
+        Station = {
+            Gates = {
+                Gas = {Present = {"Battery"}},
+            },
+            Depends = {
+                WhiteKey = {"Hammer", "Wrench"},
+                Gas = {"Battery"},
+            },
+        },
+        Gallery = {
+            Gates = {
+                WhiteKey = {Present = {"RedEgg", "GreenEgg", "BlueEgg"}},
+            },
+            Depends = {
+                WhiteKey = {"RedEgg", "GreenEgg", "BlueEgg", "Hammer", "Wrench"},
+            },
+        },
+        Forest = {
+            Gates = {
+                WhiteKey = {Present = {"Torch"}, Active = {"Torch"}},
+            },
+            Depends = {
+                WhiteKey = {"Torch", "Hammer", "Wrench"},
+            },
+        },
+        School = {
+            Depends = {
+                GreenGear = {"Book"},
+                WhiteKey = {"RedGear", "GreenGear", "Hammer", "Wrench"},
+            },
+        },
+        Hospital = {
+            Gates = {
+                WhiteKey = {Present = {"EmptyVial", "GreenVial", "PurpleVial"}},
+            },
+            Depends = {
+                WhiteKey = {"GreenVial", "PurpleVial", "Hammer", "Plank"},
+            },
+        },
+        Metro = {
+            Gates = {
+                BlueKeycard = {Present = {"Coin"}},
+            },
+            Depends = {
+                BlueKeycard = {"Coin"},
+                WhiteKey = {"BlueKeycard"},
+            },
+        },
+        Carnival = {
+            Gates = {
+                Hammer = {Present = {"Mallet"}},
+                KeyCode = {Present = {"WaterGun"}},
+            },
+            Depends = {
+                Hammer = {"Mallet"},
+                KeyCode = {"WaterGun"},
+                WhiteKey = {"Hammer", "Wrench", "KeyCode"},
+            },
+        },
+        City = {
+            Gates = {
+                FireExtinguisher = {Present = {"Dynamite"}, Active = {"Dynamite"}},
+                KeyCode = {Active = {"FireExtinguisher", "Plank"}},
+            },
+            Depends = {
+                KeyCode = {"Dynamite", "FireExtinguisher", "Plank"},
+            },
+        },
+        Mall = {
+            Gates = {
+                WhiteKey = {Present = {"Coin"}},
+            },
+            Depends = {
+                WhiteKey = {"Coin", "Crowbar"},
+            },
+        },
+        Outpost = {
+            Gates = {
+                Gas = {Active = {"FireExtinguisher"}},
+                TankBullet = {Active = {"Wrench"}},
+                BlueKeycard = {Present = {"Gas", "TankBullet"}},
+            },
+            Depends = {
+                Gas = {"FireExtinguisher"},
+                TankBullet = {"Wrench"},
+                BlueKeycard = {"Gas", "TankBullet", "Wrench", "FireExtinguisher"},
+            },
+        },
+        Plant = {
+            Gates = {
+                PurpleVial = {Present = {"Battery"}},
+                Dynamite = {Present = {"GreenVial", "PurpleVial"}},
+                WhiteKey = {Present = {"Torch"}, Active = {"Torch"}},
+                Mallet = {Present = {"Coin"}},
+            },
+            Depends = {
+                PurpleVial = {"Battery"},
+                Dynamite = {"GreenVial", "PurpleVial"},
+                WhiteKey = {"Torch"},
+                Mallet = {"Coin"},
+            },
+        },
+        Alleys = {
+            Depends = {
+                WhiteKey = {"Scissors", "Mop", "Screwdriver", "KeyCode"},
+            },
+        },
+        Store = {
+            Gates = {
+                YellowKey = {Active = {"RemoteControl"}},
+            },
+            Depends = {
+                YellowKey = {"RemoteControl"},
+                Ladder = {"YellowKey"},
+            },
+        },
+        Refinery = {
+            Depends = {
+                WhiteKey = {"Scissors", "SmokeGrenade", "GreenKeycard", "Battery"},
+            },
+        },
+        SafePlace = {
+            Depends = {
+                Blowtorch = {"FireExtinguisher", "Screwdriver", "Ladder"},
+                WhiteKey = {"Screwdriver", "Ladder", "RedKey"},
+            },
+        },
+        Sewers = {
+            Gates = {
+                Mop = {Present = {"WhiteGear"}},
+                WhiteKey = {Present = {"Mop"}},
+            },
+            Depends = {
+                Mop = {"WhiteGear", "Screwdriver"},
+                WhiteKey = {"Mop", "Screwdriver"},
+            },
+        },
+        Factory = {
+            Depends = {
+                WoodenSword = {"Axe", "FireExtinguisher", "Shovel", "Ladder", "Screwdriver"},
+            },
+        },
+        Port = {
+            Depends = {
+                GrapplingHook = {"YellowKey"},
+            },
+        },
+        Ship = {
+            Depends = {
+                WhiteKey = {"Screwdriver", "Wrench"},
+            },
+        },
+        Docks = {
+            Depends = {
+                WhiteKey = {"Candle", "Hammer", "Plank"},
+            },
+        },
+        Temple = {
+            Depends = {
+                WhiteKey = {"Candle", "Shovel", "Hammer", "Plank"},
+            },
+        },
+        Camp = {
+            Depends = {
+                ElevatorKey = {"Ladder", "Shovel", "Rope", "TNT"},
+            },
+        },
+        Lab = {
+            Depends = {
+                BlueKeycard = {"Wrench"},
+            },
+        },
+    }
+
+    mapProfiles["The Safe Place"] = mapProfiles.SafePlace
 
     local function cleanAssetId(value)
         return tostring(value or ""):match("%d+") or ""
@@ -640,21 +848,14 @@ return function(ctx)
         local id = itemId(item)
         local map = currentMapName()
 
-        if map == "House" and id == "WhiteKey" then
-            if requirementExists("RedGear")
-                or requirementExists("GreenGear")
-                or itemStagePresent("RedGear")
-                or itemStagePresent("GreenGear") then
-                return false
+        local profile = mapProfiles[map]
+        local gate = profile and profile.Gates and profile.Gates[id]
+        if gate then
+            for _, dependency in ipairs(gate.Present or {}) do
+                if itemStagePresent(dependency) then return false end
             end
-        end
-
-        if map == "Gallery" and id == "WhiteKey" then
-            if requirementExists("RedEgg")
-                or requirementExists("GreenEgg")
-                or itemStagePresent("RedEgg")
-                or itemStagePresent("GreenEgg") then
-                return false
+            for _, dependency in ipairs(gate.Active or {}) do
+                if requirementExists(dependency) then return false end
             end
         end
 
@@ -1695,6 +1896,18 @@ return function(ctx)
     end
 
     local function blockingObjectiveFor(objective, objectives)
+        local profile = mapProfiles[currentMapName()]
+        local dependencies = profile and profile.Depends and profile.Depends[objective.Id]
+        if dependencies then
+            for _, dependency in ipairs(dependencies) do
+                for _, candidate in ipairs(objectives) do
+                    if candidate ~= objective and candidate.Id == dependency then
+                        return candidate
+                    end
+                end
+            end
+        end
+
         if not isLockItem(objective.Id) then return nil end
 
         local best
