@@ -1928,6 +1928,308 @@ return function(ctx)
         return true
     end
 
+    local puzzleBusy = false
+    local puzzleRetryAt = 0
+
+    local function controlPosition(control)
+        local parent = control and control.Parent
+        if parent and parent:IsA("BasePart") then return parent.Position end
+        local model = parent and parent:FindFirstAncestorOfClass("Model")
+        local part = model and getPart(model)
+        return part and part.Position
+    end
+
+    local function uniqueControls(controls)
+        local result = {}
+        local seen = {}
+        for _, control in ipairs(controls) do
+            local part = control.Parent
+            local key = part or control
+            if not seen[key] and controlPosition(control) then
+                seen[key] = true
+                result[#result + 1] = control
+            end
+        end
+        return result
+    end
+
+    local function choosePuzzleControls(keywords, expected)
+        local controls = uniqueControls(collectMapControls(keywords))
+        if #controls <= expected then return controls end
+
+        table.sort(controls, function(a, b)
+            local ta = ancestorText(a, 4)
+            local tb = ancestorText(b, 4)
+            local sa = 0
+            local sb = 0
+            for _, word in ipairs(keywords) do
+                if ta:find(word, 1, true) then sa += 1 end
+                if tb:find(word, 1, true) then sb += 1 end
+            end
+            if sa == sb then
+                return tostring(a:GetFullName()) < tostring(b:GetFullName())
+            end
+            return sa > sb
+        end)
+
+        local result = {}
+        for index = 1, math.min(expected, #controls) do
+            result[index] = controls[index]
+        end
+        return result
+    end
+
+    local function cyclePuzzle(keywords, expected, states, limit)
+        local controls = choosePuzzleControls(keywords, expected)
+        if #controls ~= expected then return false end
+
+        local before = progressionFingerprint()
+        local maxSteps = limit or (states ^ expected)
+        local counters = table.create(expected, 0)
+
+        for _ = 1, maxSteps do
+            local carry = true
+            for index = 1, expected do
+                if carry then
+                    clickControl(controls[index])
+                    counters[index] += 1
+                    if counters[index] >= states then
+                        counters[index] = 0
+                    else
+                        carry = false
+                    end
+                end
+            end
+            task.wait(0.008)
+            if progressionFingerprint() ~= before then return true end
+        end
+        return false
+    end
+
+    local puzzleColors = {
+        Red = Color3.fromRGB(255, 0, 0),
+        Yellow = Color3.fromRGB(255, 255, 0),
+        Blue = Color3.fromRGB(0, 85, 255),
+        Green = Color3.fromRGB(0, 255, 0),
+    }
+
+    local function nearestPuzzleColor(color)
+        local best
+        local distance = math.huge
+        for name, reference in pairs(puzzleColors) do
+            local dr = color.R - reference.R
+            local dg = color.G - reference.G
+            local db = color.B - reference.B
+            local current = dr * dr + dg * dg + db * db
+            if current < distance then
+                best = name
+                distance = current
+            end
+        end
+        return best
+    end
+
+    local function dominantOrder(parts)
+        if #parts <= 1 then return parts end
+        local a = parts[1]
+        local b = parts[2]
+        local maxDistance = 0
+        for i = 1, #parts do
+            for j = i + 1, #parts do
+                local distance = (parts[i].Position - parts[j].Position).Magnitude
+                if distance > maxDistance then
+                    maxDistance = distance
+                    a = parts[i]
+                    b = parts[j]
+                end
+            end
+        end
+        local axis = b.Position - a.Position
+        if axis.Magnitude < 0.01 then return parts end
+        axis = axis.Unit
+        table.sort(parts, function(left, right)
+            return (left.Position - a.Position):Dot(axis) < (right.Position - a.Position):Dot(axis)
+        end)
+        return parts
+    end
+
+    local function solveShipColorCode()
+        local map = currentMapModel()
+        if not map then return false end
+
+        local monitors = {}
+        for _, descendant in ipairs(map:GetDescendants()) do
+            if descendant:IsA("BasePart") then
+                local text = ancestorText(descendant, 4)
+                if (text:find("control", 1, true) or text:find("monitor", 1, true) or text:find("panel", 1, true))
+                    and descendant.Transparency < 0.9 then
+                    local colorName = nearestPuzzleColor(descendant.Color)
+                    if colorName then
+                        local brightness = math.max(descendant.Color.R, descendant.Color.G, descendant.Color.B)
+                        if brightness >= 0.45 then
+                            monitors[#monitors + 1] = {Part = descendant, Color = colorName}
+                        end
+                    end
+                end
+            end
+        end
+
+        local dedup = {}
+        local monitorParts = {}
+        for _, entry in ipairs(monitors) do
+            local model = entry.Part:FindFirstAncestorOfClass("Model") or entry.Part
+            if not dedup[model] then
+                dedup[model] = entry
+                monitorParts[#monitorParts + 1] = entry.Part
+            end
+        end
+        if #monitorParts < 4 then return false end
+
+        dominantOrder(monitorParts)
+        local sequence = {}
+        for _, part in ipairs(monitorParts) do
+            local model = part:FindFirstAncestorOfClass("Model") or part
+            local entry = dedup[model]
+            if entry then
+                sequence[#sequence + 1] = entry.Color
+                if #sequence == 4 then break end
+            end
+        end
+        if #sequence ~= 4 then return false end
+
+        local controls = collectMapControls({"color", "code", "keypad", "button"})
+        local byColor = {}
+        for _, control in ipairs(controls) do
+            local part = control.Parent
+            if part and part:IsA("BasePart") then
+                byColor[nearestPuzzleColor(part.Color)] = byColor[nearestPuzzleColor(part.Color)] or control
+            end
+        end
+        for _, colorName in ipairs(sequence) do
+            if not byColor[colorName] then return false end
+        end
+
+        local before = progressionFingerprint()
+        for _, colorName in ipairs(sequence) do
+            clickControl(byColor[colorName])
+            task.wait(0.025)
+        end
+        return waitForProgress(before, 0.5)
+    end
+
+    local function partLit(part)
+        if not part or not part:IsA("BasePart") then return false end
+        local light = part:FindFirstChildWhichIsA("PointLight", true)
+            or part:FindFirstChildWhichIsA("SurfaceLight", true)
+        if light and light.Enabled then return true end
+        if part.Material == Enum.Material.Neon then return true end
+        return math.max(part.Color.R, part.Color.G, part.Color.B) > 0.72
+    end
+
+    local function solveCampLightCircle()
+        local controls = choosePuzzleControls({"light", "circle", "puzzle", "roulette", "button"}, 8)
+        if #controls ~= 8 then return false end
+
+        local center = Vector3.zero
+        local entries = {}
+        for _, control in ipairs(controls) do
+            local position = controlPosition(control)
+            if not position then return false end
+            center += position
+            entries[#entries + 1] = {Control = control, Position = position, Part = control.Parent}
+        end
+        center /= #entries
+
+        table.sort(entries, function(a, b)
+            local aa = math.atan2(a.Position.Z - center.Z, a.Position.X - center.X)
+            local bb = math.atan2(b.Position.Z - center.Z, b.Position.X - center.X)
+            return aa < bb
+        end)
+
+        local startIndex = 1
+        for index, entry in ipairs(entries) do
+            if partLit(entry.Part) then
+                startIndex = index
+                break
+            end
+        end
+
+        local before = progressionFingerprint()
+        for _, direction in ipairs({1, -1}) do
+            for _, offset in ipairs({2, 5, 6}) do
+                local index = ((startIndex - 1 + direction * offset) % 8) + 1
+                clickControl(entries[index].Control)
+                task.wait(0.025)
+            end
+            if waitForProgress(before, 0.25) then return true end
+        end
+        return false
+    end
+
+    local function solveLabLevers()
+        local controls = choosePuzzleControls({"lever", "switch"}, 9)
+        if #controls ~= 9 then return false end
+
+        local before = progressionFingerprint()
+        local previousGray = 0
+        for step = 1, 511 do
+            local gray = bit32.bxor(step, bit32.rshift(step, 1))
+            local changed = bit32.bxor(gray, previousGray)
+            previousGray = gray
+            local bit = 0
+            while bit < 9 do
+                if bit32.band(changed, bit32.lshift(1, bit)) ~= 0 then
+                    clickControl(controls[bit + 1])
+                    break
+                end
+                bit += 1
+            end
+            task.wait(0.006)
+            if step % 8 == 0 and progressionFingerprint() ~= before then return true end
+        end
+        return progressionFingerprint() ~= before
+    end
+
+    local function solveSpecialPuzzle()
+        local profile = mapProfiles[currentMapName()]
+        local puzzle = profile and profile.Puzzle
+        if not puzzle or puzzleBusy or os.clock() < puzzleRetryAt then return false end
+
+        puzzleBusy = true
+        local ok, solved = pcall(function()
+            if puzzle == "DigitCode" then
+                local map = currentMapModel()
+                if map then
+                    for _, descendant in ipairs(map:GetDescendants()) do
+                        if descendant:IsA("Model") or descendant:IsA("BasePart") then
+                            if solveCodePanel(descendant) then return true end
+                        end
+                    end
+                end
+                return cyclePuzzle({"digit", "number", "code", "keypad"}, 3, 10, 1000)
+            elseif puzzle == "ColorCode" then
+                return solveShipColorCode()
+            elseif puzzle == "RomanCode" then
+                return cyclePuzzle({"roman", "numeral", "code", "puzzle"}, 3, 4, 64)
+            elseif puzzle == "ShapeWheel" then
+                return cyclePuzzle({"shape", "wheel", "symbol", "puzzle"}, 3, 4, 64)
+            elseif puzzle == "LightCircle" then
+                return solveCampLightCircle()
+            elseif puzzle == "ReactorLevers" then
+                return solveLabLevers()
+            end
+            return false
+        end)
+
+        puzzleBusy = false
+        if not ok or not solved then
+            puzzleRetryAt = os.clock() + 1.25
+            return false
+        end
+        puzzleRetryAt = os.clock() + 0.25
+        return true
+    end
+
     local function isFreeProgressInteraction(interactive)
         if not interactive or not interactive.Parent then return false end
         if itemObjectFrom(interactive) or belongsToItem(interactive) then return false end
