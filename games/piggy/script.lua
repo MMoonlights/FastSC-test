@@ -912,13 +912,59 @@ return function(ctx)
         return (requirementCounts[id] or 0) > 0
     end
 
+    local function currentEventsRoot()
+        local map = currentMapModel()
+        if not map then return nil end
+        return map:FindFirstChild("Events")
+            or map:FindFirstChild("events")
+            or map:FindFirstChild("EventFolder")
+            or map:FindFirstChild("Event")
+    end
+
+    local function requirementEventMesh(parent)
+        if not parent then return false end
+        local mesh = parent:FindFirstChildWhichIsA("SpecialMesh", true)
+        return mesh
+            and cleanAssetId(mesh.MeshId) == "524497312"
+            and (mesh.Scale - Vector3.new(0.75, 0.5, 0.75)).Magnitude <= 0.08
+    end
+
+    local function isObjectiveRequirement(value)
+        if not value or not value.Parent or not value:IsA("StringValue") then return false end
+        if not aliases[token(value.Value)] then return false end
+        if itemObjectFrom(value) then return false end
+
+        local map = currentMapModel()
+        if not map or not value:IsDescendantOf(map) then return false end
+
+        if value.Name == "ToolRequired" then return true end
+
+        local events = currentEventsRoot()
+        if events and value:IsDescendantOf(events) then
+            local parent = value.Parent
+            if requirementEventMesh(parent) then return true end
+            if parent:FindFirstChildWhichIsA("ClickDetector", true)
+                or parent:FindFirstChildWhichIsA("ProximityPrompt", true)
+                or parent:FindFirstChildWhichIsA("TouchTransmitter", true) then
+                return true
+            end
+        end
+
+        return false
+    end
+
     local function updateRequirement(value)
         local old = requirementIdByValue[value]
         if old then
             requirementCounts[old] = math.max(0, (requirementCounts[old] or 1) - 1)
             if requirementCounts[old] == 0 then requirementCounts[old] = nil end
         end
-        local id = aliases[token(value.Value)]
+
+        local id
+        if isObjectiveRequirement(value) then
+            id = aliases[token(value.Value)]
+        end
+
         requirementIdByValue[value] = id
         if id then requirementCounts[id] = (requirementCounts[id] or 0) + 1 end
         itemUiDirty = true
@@ -2945,7 +2991,7 @@ end)()
         local result = {}
         local seen = {}
         for value in pairs(requirements) do
-            if value.Parent and not belongsToItem(value) then
+            if value.Parent and isObjectiveRequirement(value) and not belongsToItem(value) then
                 local id = idFromText(value.Value)
                 if id then
                     local target = targetFromRequirement(value)
