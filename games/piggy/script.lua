@@ -161,6 +161,7 @@ return function(ctx)
 
     local automationActive = false
     local automationTarget
+    local automationDeadline = 0
 
     local function zeroCharacterVelocity(character)
         if not character then return end
@@ -193,6 +194,7 @@ return function(ctx)
         if not root then return false end
         automationActive = true
         automationTarget = target
+        automationDeadline = os.clock() + 2
         setAutomationCollision(true)
         if humanoid then scope:Set(humanoid, "AutoRotate", false) end
         zeroCharacterVelocity(character)
@@ -207,6 +209,7 @@ return function(ctx)
         local humanoid = character and character:FindFirstChildOfClass("Humanoid")
         automationTarget = nil
         automationActive = false
+        automationDeadline = 0
         zeroCharacterVelocity(character)
         if humanoid then scope:Restore(humanoid, "AutoRotate") end
         if not noclip then setAutomationCollision(false) end
@@ -214,6 +217,12 @@ return function(ctx)
 
     scope:Connect(RunService.PreSimulation, function()
         if not automationActive then return end
+        if automationDeadline > 0 and os.clock() > automationDeadline then
+            endAutomationMove()
+            pickupBusy = false
+            autoCompleteBusy = false
+            return
+        end
         local character = localPlayer.Character
         local root = character and character:FindFirstChild("HumanoidRootPart")
         if not root then return end
@@ -1470,6 +1479,13 @@ return function(ctx)
     end
 
     local function targetFromRequirement(value)
+        if value and value.Parent and value.Name == "ToolRequired" then
+            local direct = value.Parent
+            if direct:IsA("BasePart") or getPart(direct) then
+                return direct
+            end
+        end
+
         local current = value.Parent
         local fallback
         for _ = 1, 5 do
@@ -1479,6 +1495,15 @@ return function(ctx)
                 local part = getPart(current)
                 if part then
                     fallback = fallback or current
+                    local mesh = current:FindFirstChildWhichIsA("SpecialMesh", true)
+                    local eventMesh = mesh
+                        and cleanAssetId(mesh.MeshId) == "524497312"
+                        and (mesh.Scale - Vector3.new(0.75, 0.5, 0.75)).Magnitude <= 0.05
+                    if eventMesh then return current end
+
+                    local required = current:FindFirstChild("ToolRequired")
+                    if required and required:IsA("StringValue") then return current end
+
                     local lower = string.lower(current.Name)
                     local hasInteraction = current:FindFirstChildWhichIsA("ClickDetector", true)
                         or current:FindFirstChildWhichIsA("ProximityPrompt", true)
@@ -1488,9 +1513,7 @@ return function(ctx)
                         or lower:find("lock", 1, true)
                         or lower:find("power", 1, true)
                         or lower:find("safe", 1, true)
-                    local mesh = current:FindFirstChildWhichIsA("SpecialMesh", true)
-                    local eventMesh = mesh and cleanAssetId(mesh.MeshId) == "524497312"
-                    if hasInteraction or isNamed or eventMesh then return current end
+                    if hasInteraction or isNamed then return current end
                 end
             end
             current = current.Parent
@@ -1682,48 +1705,86 @@ return function(ctx)
         local humanoid = character and character:FindFirstChildOfClass("Humanoid")
         if object and object:IsA("Tool") and humanoid and object.Parent ~= character then
             humanoid:EquipTool(object)
-            task.wait(0.08)
+            task.wait(0.04)
+            local equipped = character:FindFirstChildWhichIsA("Tool")
+            if equipped and (itemId(equipped) == id or aliases[token(equipped.Name)] == id) then
+                object = equipped
+            end
         end
         return object
     end
 
+    local function objectiveStillActive(objective)
+        local requirement = objective and objective.Requirement
+        return requirement
+            and requirement.Parent
+            and idFromText(requirement.Value) == objective.Id
+    end
+
     local function activateObjective(objective)
         if not objective or not objective.Target or not objective.Target.Parent then return false end
-        local root = Common.Root()
-        local part = getPart(objective.Target)
-        if not part then return false end
+
         local character = localPlayer.Character
         local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-        local target = part.CFrame + part.CFrame.LookVector * -2 + Vector3.new(0, 1.5, 0)
+        local tool = findOwnedById(objective.Id)
+        if not character or not humanoid or not tool then return false end
+
+        if tool.Parent ~= character then
+            humanoid:EquipTool(tool)
+            task.wait(0.03)
+            tool = findOwnedById(objective.Id) or character:FindFirstChildWhichIsA("Tool")
+        end
+
+        local handle = tool and (tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart", true))
+        local eventPart
+        if objective.Requirement and objective.Requirement.Parent and objective.Requirement.Parent:IsA("BasePart") then
+            eventPart = objective.Requirement.Parent
+        else
+            eventPart = getPart(objective.Target)
+        end
+        if not eventPart then return false end
+
+        local target = eventPart.CFrame + Vector3.new(1, 0, 1)
         beginAutomationMove(target)
-        if humanoid then humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end
-        task.wait(0.025)
-        local fired = false
-        if objective.Target:IsA("ClickDetector") and fireclickdetector then
-            pcall(fireclickdetector, objective.Target)
-            fired = true
-        elseif objective.Target:IsA("ProximityPrompt") and fireproximityprompt then
-            pcall(fireproximityprompt, objective.Target)
-            fired = true
-        end
-        for _, descendant in ipairs(objective.Target:GetDescendants()) do
-            if descendant:IsA("ClickDetector") and fireclickdetector then
-                pcall(fireclickdetector, descendant)
-                fired = true
-            elseif descendant:IsA("ProximityPrompt") and fireproximityprompt then
-                pcall(fireproximityprompt, descendant)
-                fired = true
+        task.wait(0.02)
+
+        local touched = false
+        local ok = pcall(function()
+            for _ = 1, 8 do
+                if not objectiveStillActive(objective) then break end
+                automationDeadline = os.clock() + 2
+                humanoid.Jump = true
+
+                if handle and firetouchinterest then
+                    firetouchinterest(handle, eventPart, 0)
+                    task.wait(0.025)
+                    firetouchinterest(handle, eventPart, 1)
+                    touched = true
+                else
+                    local root = character:FindFirstChild("HumanoidRootPart")
+                    if root and firetouchinterest then
+                        firetouchinterest(root, eventPart, 0)
+                        task.wait(0.025)
+                        firetouchinterest(root, eventPart, 1)
+                        touched = true
+                    end
+                end
+
+                pcall(function() tool:Activate() end)
+
+                local click = eventPart:FindFirstChildWhichIsA("ClickDetector", true)
+                local prompt = eventPart:FindFirstChildWhichIsA("ProximityPrompt", true)
+                if click and fireclickdetector then pcall(fireclickdetector, click) end
+                if prompt and fireproximityprompt then pcall(fireproximityprompt, prompt) end
+                task.wait(0.035)
             end
-        end
-        if firetouchinterest then
-            Common.Touch(root, part)
-            fired = true
-        end
-        local equipped = character and character:FindFirstChildWhichIsA("Tool")
-        if equipped then pcall(function() equipped:Activate() end) end
-        task.wait(0.08)
+        end)
+
+        humanoid.Jump = false
+        task.wait(0.04)
+        local completed = not objectiveStillActive(objective)
         endAutomationMove()
-        return fired
+        return ok and (completed or touched)
     end
 
     local function autoEscapeStep()
