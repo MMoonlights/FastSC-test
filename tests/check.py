@@ -135,6 +135,9 @@ for token in [
     "objectiveCooldowns",
     "disableEnemyTouchTransmitters",
     "restoreEnemyTouchTransmitters",
+    "escapeTouchOverride",
+    "isEscapeRelatedPart",
+    "nearEscapeTrigger",
     "isWorldItem",
     "playerCharacterAncestor",
     'object:IsA("Tool")',
@@ -191,6 +194,10 @@ assert "scope:Connect(RunService.Heartbeat" not in piggy
 assert "PathfindingService" not in piggy
 assert "computeReachable" not in piggy
 assert "reachabilityPending" not in piggy
+assert "escapeTouchOverride" in piggy
+assert "nearEscapeTrigger" in piggy
+assert "isEscapeRelatedPart" in piggy
+assert 'setCharacterTouch(false)' in piggy
 
 intercity = texts["games/piggy-intercity/script.lua"]
 for token in [
