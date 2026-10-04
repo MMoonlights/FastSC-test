@@ -399,8 +399,8 @@ return function(ctx)
                 Gas = {Present = {"Battery"}},
             },
             Depends = {
-                WhiteKey = {"Hammer", "Wrench"},
-                Gas = {"Battery", "Hammer", "Wrench"},
+                WhiteKey = {"Hammer", "Wrench", "Plank"},
+                Gas = {"Battery", "Hammer", "Wrench", "Plank"},
             },
             Counters = {
                 Battery = 2,
@@ -427,7 +427,7 @@ return function(ctx)
                 WhiteKey = {Present = {"Torch"}, Active = {"Torch"}},
             },
             Depends = {
-                WhiteKey = {"Torch", "Hammer", "Wrench"},
+                WhiteKey = {"Torch", "Hammer", "Wrench", "Plank"},
             },
             Priority = {
                 GreenKey = 10, RedKey = 15, BlueKey = 20, OrangeKey = 25, YellowKey = 30,
@@ -451,7 +451,7 @@ return function(ctx)
                 WhiteKey = {Present = {"EmptyVial", "GreenVial", "PurpleVial"}},
             },
             Depends = {
-                WhiteKey = {"GreenVial", "PurpleVial", "Hammer"},
+                WhiteKey = {"GreenVial", "PurpleVial", "Hammer", "Plank", "Wrench"},
             },
             Counters = {
                 EmptyVial = 2,
@@ -486,7 +486,7 @@ return function(ctx)
             Depends = {
                 Hammer = {"Mallet"},
                 KeyCode = {"WaterGun"},
-                WhiteKey = {"OrangeKey", "Hammer", "Wrench", "KeyCode"},
+                WhiteKey = {"OrangeKey", "Hammer", "Wrench", "KeyCode", "Plank"},
             },
             Priority = {
                 BlueKey = 10, GreenKey = 15, RedKey = 20, YellowKey = 25, OrangeKey = 30,
@@ -498,7 +498,8 @@ return function(ctx)
                 KeyCode = {Active = {"FireExtinguisher", "Plank"}},
             },
             Depends = {
-                KeyCode = {"FireExtinguisher", "Plank", "Wrench"},
+                FireExtinguisher = {"Dynamite"},
+                KeyCode = {"Dynamite", "FireExtinguisher", "Plank", "Wrench"},
             },
             Priority = {
                 GreenKeycard = 10, RedKeycard = 15, OrangeKeycard = 20, BlueKeycard = 25,
@@ -510,7 +511,7 @@ return function(ctx)
                 WhiteKey = {Present = {"Coin"}},
             },
             Depends = {
-                WhiteKey = {"Coin", "Crowbar", "Wrench"},
+                WhiteKey = {"Coin", "Crowbar", "Wrench", "Mirror", "Plank", "GreenKeycard"},
             },
             Counters = {
                 Coin = 2,
@@ -594,7 +595,8 @@ return function(ctx)
         Refinery = {
             Depends = {
                 Screwdriver = {"RedKey"},
-                WhiteKey = {"OrangeKey", "Scissors", "GreenKey", "Carrot"},
+                WhiteKey = {"Scissors", "GreenKey", "RedKey", "BlueKey", "YellowKey",
+                    "Screwdriver", "Carrot", "GreenKeycard", "Battery", "OrangeKey", "PurpleKey"},
             },
             Priority = {
                 Scissors = 10, GreenKey = 15, BlueKey = 20, RedKey = 25, YellowKey = 30,
@@ -604,9 +606,10 @@ return function(ctx)
         },
         SafePlace = {
             Depends = {
-                Hammer = {"Screwdriver", "Ladder"},
-                Blowtorch = {"FireExtinguisher", "Screwdriver", "Ladder"},
-                WhiteKey = {"YellowKey", "Hammer", "Blowtorch"},
+                Hammer = {"Screwdriver", "Ladder", "ElevatorKey"},
+                Blowtorch = {"FireExtinguisher", "Screwdriver", "Ladder", "ElevatorKey"},
+                WhiteKey = {"Screwdriver", "Ladder", "ElevatorKey", "YellowKey",
+                    "FireExtinguisher", "Hammer", "Blowtorch"},
             },
             Priority = {
                 Screwdriver = 10, Ladder = 15, RedKey = 20, YellowKey = 25,
@@ -670,7 +673,7 @@ return function(ctx)
             PuzzleBefore = {"WhiteKey"},
             Depends = {
                 Plank = {"Hammer"},
-                WhiteKey = {"GreenKey", "Hammer", "Plank", "Candle"},
+                WhiteKey = {"GreenKey", "Hammer", "Plank", "Candle", "TNT"},
             },
             Priority = {
                 BlueKey = 10, GreenKey = 15, OrangeKey = 20, RedKey = 25,
@@ -683,7 +686,7 @@ return function(ctx)
             Depends = {
                 Hammer = {"RedKey"},
                 Plank = {"Hammer"},
-                WhiteKey = {"Shovel", "Hammer", "Plank", "Candle"},
+                WhiteKey = {"Shovel", "Hammer", "Plank", "Candle", "Gas"},
             },
             Priority = {
                 BlueKey = 10, GreenKey = 15, OrangeKey = 20, RedKey = 25,
@@ -693,7 +696,7 @@ return function(ctx)
         Camp = {
             Puzzle = "LightCircle",
             Depends = {
-                ElevatorKey = {"RedKey"},
+                ElevatorKey = {"RedKey", "Shovel", "Ladder", "Rope", "TNT"},
             },
             Priority = {
                 GreenKey = 10, OrangeKey = 15, BlueKey = 20, RedKey = 25,
@@ -3124,7 +3127,7 @@ end)()
             if blocker then
                 score = 1000000 + profilePriority(blocker.Id)
             elseif owned then
-                score = blockerPriority[objective.Id] or 100
+                score = profilePriority(objective.Id)
             elseif worldItem then
                 score = 200 + profilePriority(objective.Id) + (worldDistance or 0) * 0.01
             else
