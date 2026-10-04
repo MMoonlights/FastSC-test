@@ -192,11 +192,24 @@ for token in [
     "RedEgg",
     "GreenEgg",
     "mapProfiles",
-    'Present = {"RedEgg", "GreenEgg", "BlueEgg"}',
+    'Present = {"RedEgg", "GreenEgg"}',
     'Factory = {',
     'scope:Loop("autoComplete", 0.05',
 ]:
     assert token in piggy, token
+
+story_maps = [
+    "House", "Station", "Gallery", "Forest", "School", "Hospital",
+    "Metro", "Carnival", "City", "Mall", "Outpost", "Plant",
+    "Alleys", "Store", "Refinery", "SafePlace", "Sewers", "Factory",
+    "Port", "Ship", "Docks", "Temple", "Camp", "Lab",
+]
+profiles_start = piggy.index("local mapProfiles = {")
+profiles_end = piggy.index('mapProfiles["The Safe Place"]', profiles_start)
+profiles_text = piggy[profiles_start:profiles_end]
+for map_name in story_maps:
+    assert re.search(rf"\b{re.escape(map_name)}\s*=\s*\{{", profiles_text), f"missing map profile: {map_name}"
+    assert re.search(rf"\b{re.escape(map_name)}\s*=\s*\{{[\s\S]*?Priority\s*=\s*\{{", profiles_text), f"missing map priority: {map_name}"
 
 assert "scope:Connect(RunService.Heartbeat" not in piggy
 assert "PathfindingService" not in piggy
