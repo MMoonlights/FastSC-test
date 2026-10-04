@@ -189,6 +189,11 @@ for token in [
     "Presents",
     "Dreidel",
     "FencingSword",
+    "RedEgg",
+    "GreenEgg",
+    'map == "Gallery"',
+    'itemStagePresent("RedEgg")',
+    'itemStagePresent("GreenEgg")',
     'scope:Loop("autoComplete", 0.05',
 ]:
     assert token in piggy, token
