@@ -561,6 +561,7 @@ return function(ctx)
         },
         Alleys = {
             Puzzle = "DigitCode",
+            PuzzleBefore = {"WhiteKey"},
             Depends = {
                 Screwdriver = {"YellowKey"},
                 WhiteKey = {"OrangeKey", "Scissors", "Mop", "Screwdriver", "PurpleKey", "KeyCode"},
@@ -653,6 +654,7 @@ return function(ctx)
         },
         Ship = {
             Puzzle = "ColorCode",
+            PuzzleBefore = {"WhiteKey"},
             Depends = {
                 WhiteKey = {"Screwdriver", "Wrench"},
             },
@@ -663,6 +665,7 @@ return function(ctx)
         },
         Docks = {
             Puzzle = "RomanCode",
+            PuzzleBefore = {"WhiteKey"},
             Depends = {
                 Plank = {"Hammer"},
                 WhiteKey = {"GreenKey", "Hammer", "Plank", "Candle"},
@@ -674,6 +677,7 @@ return function(ctx)
         },
         Temple = {
             Puzzle = "ShapeWheel",
+            PuzzleBefore = {"WhiteKey"},
             Depends = {
                 Hammer = {"RedKey"},
                 Plank = {"Hammer"},
@@ -686,6 +690,7 @@ return function(ctx)
         },
         Camp = {
             Puzzle = "LightCircle",
+            PuzzleBefore = {"ElevatorKey"},
             Depends = {
                 ElevatorKey = {"RedKey"},
             },
@@ -3315,17 +3320,25 @@ end)()
         local ok, errorMessage = pcall(function()
             local objectives, objective = refreshObjectiveState()
 
-            if #objectives == 0 then
+            local profile = mapProfiles[currentMapName()]
+            local puzzleBefore = profile and profile.PuzzleBefore
+            local puzzleIsNext = objective and puzzleBefore and table.find(puzzleBefore, objective.Id) ~= nil
+
+            if #objectives == 0 or puzzleIsNext then
                 if solveSpecialPuzzle() then
                     task.wait(0.03)
                     refreshObjectiveState()
-                elseif runFreeInteractionStep() then
-                    task.wait(0.03)
-                    refreshObjectiveState()
-                else
-                    autoEscapeStep()
+                    return
                 end
-                return
+                if #objectives == 0 then
+                    if runFreeInteractionStep() then
+                        task.wait(0.03)
+                        refreshObjectiveState()
+                    else
+                        autoEscapeStep()
+                    end
+                    return
+                end
             end
 
             if not objective then return end
@@ -3337,7 +3350,9 @@ end)()
                     objectiveCooldowns[objective.Requirement] = os.clock() + (completed and 0.08 or 0.3)
                 end
                 if not completed then
-                    runFreeInteractionStep()
+                    if not solveSpecialPuzzle() then
+                        runFreeInteractionStep()
+                    end
                 end
             else
                 if not solveSpecialPuzzle() then
