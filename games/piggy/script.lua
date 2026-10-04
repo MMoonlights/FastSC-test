@@ -1699,30 +1699,37 @@ return function(ctx)
     end
 
     local solveCodePanel, solveSpecialPuzzle = (function()
+    local puzzleBusy = false
+    local puzzleRetryAt = 0
+    local solvedPuzzles = {}
+
+    local canonicalRoots = {
+        DigitCode = {"digitcodepad", "digitcode", "numbercodepad", "codepad"},
+        ColorCode = {"colorcodepad", "colorcode"},
+        RomanCode = {"romannumeralpuzzlemain", "romannumeralpuzzle", "romannumeral"},
+        ShapeWheel = {"shapecodewheel", "shapewheel", "shapecode"},
+        LightCircle = {"lightcirclepuzzle", "lightcircle"},
+        ReactorGrid = {"ninesquarespuzzle", "ninesquares", "leverpuzzle"},
+    }
+
     local function shortValue(instance)
-        if instance:IsA("StringValue") then
-            return tostring(instance.Value)
-        end
-        if instance:IsA("IntValue") or instance:IsA("NumberValue") then
-            return tostring(instance.Value)
-        end
-        if instance:IsA("TextLabel") or instance:IsA("TextBox") then
-            return tostring(instance.Text)
-        end
+        if instance:IsA("StringValue") then return tostring(instance.Value) end
+        if instance:IsA("IntValue") or instance:IsA("NumberValue") then return tostring(instance.Value) end
+        if instance:IsA("TextLabel") or instance:IsA("TextBox") then return tostring(instance.Text) end
     end
 
     local function normalizedShortValue(instance)
         local value = shortValue(instance)
         if not value then return nil end
         value = value:gsub("^%s+", ""):gsub("%s+$", "")
-        if #value == 0 or #value > 16 then return nil end
+        if #value == 0 or #value > 24 then return nil end
         return value
     end
 
     local function ancestorText(instance, depth)
         local chunks = {}
         local current = instance
-        for _ = 1, depth or 4 do
+        for _ = 1, depth or 5 do
             if not current or current == workspace then break end
             chunks[#chunks + 1] = string.lower(current.Name)
             current = current.Parent
@@ -1730,59 +1737,49 @@ return function(ctx)
         return table.concat(chunks, " ")
     end
 
-    local function puzzleControlHost(instance)
-        local current = instance and instance.Parent
-        local fallback = current
-        for _ = 1, 4 do
-            if not current or current == workspace then break end
-            fallback = current
-            local text = string.lower(current.Name)
-            if text:find("code", 1, true)
-                or text:find("puzzle", 1, true)
-                or text:find("panel", 1, true)
-                or text:find("wheel", 1, true)
-                or text:find("roman", 1, true)
-                or text:find("lever", 1, true)
-                or text:find("circle", 1, true)
-                or text:find("switch", 1, true)
-                or text:find("keypad", 1, true) then
-                return current
-            end
-            current = current.Parent
-        end
-        return fallback
+    local function mapAndEvents()
+        local map = currentMapModel()
+        if not map then return nil, nil end
+        local events = map:FindFirstChild("Events") or map:FindFirstChild("events") or map
+        return map, events
+    end
+
+    local function controlPosition(control)
+        if not control or not control.Parent then return nil end
+        if control.Parent:IsA("BasePart") then return control.Parent.Position end
+        local model = control.Parent:FindFirstAncestorOfClass("Model")
+        local part = model and getPart(model)
+        return part and part.Position
     end
 
     local function clickControl(control)
         if not control or not control.Parent then return false end
         if control:IsA("ClickDetector") and fireclickdetector then
-            pcall(fireclickdetector, control)
+            pcall(function()
+                control.MaxActivationDistance = math.huge
+                fireclickdetector(control)
+            end)
             return true
         end
         if control:IsA("ProximityPrompt") and fireproximityprompt then
-            pcall(fireproximityprompt, control)
+            pcall(function()
+                control.HoldDuration = 0
+                fireproximityprompt(control)
+            end)
             return true
         end
         return false
     end
 
-    local function collectMapControls(keywords)
-        local map = currentMapModel()
+    local function controlsUnder(root)
         local result = {}
         local seen = {}
-        if not map then return result end
-        for _, descendant in ipairs(map:GetDescendants()) do
+        if not root then return result end
+        for _, descendant in ipairs(root:GetDescendants()) do
             if descendant:IsA("ClickDetector") or descendant:IsA("ProximityPrompt") then
-                local text = ancestorText(descendant, 5)
-                local matched = false
-                for _, keyword in ipairs(keywords) do
-                    if text:find(keyword, 1, true) then
-                        matched = true
-                        break
-                    end
-                end
-                if matched and not seen[descendant] then
-                    seen[descendant] = true
+                local part = descendant.Parent
+                if part and not seen[part] and controlPosition(descendant) then
+                    seen[part] = true
                     result[#result + 1] = descendant
                 end
             end
@@ -1790,204 +1787,398 @@ return function(ctx)
         return result
     end
 
-    local function progressionFingerprint()
-        local chunks = {currentMapName()}
-        local req = {}
-        for value in pairs(requirements) do
-            if value.Parent then
-                req[#req + 1] = tostring(value.Value) .. "@" .. tostring(value.Parent)
-            end
-        end
-        table.sort(req)
-        chunks[#chunks + 1] = table.concat(req, "|")
-        local itemIds = {}
-        for id, bucket in pairs(itemsById) do
-            local count = 0
-            for item in pairs(bucket) do
-                if isWorldItem(item) then count += 1 end
-            end
-            itemIds[#itemIds + 1] = tostring(id) .. ":" .. tostring(count)
-        end
-        table.sort(itemIds)
-        chunks[#chunks + 1] = table.concat(itemIds, "|")
-        chunks[#chunks + 1] = tostring(#workspace:GetChildren())
-        return table.concat(chunks, "#")
-    end
-
-    local function waitForProgress(before, timeout)
-        local deadline = os.clock() + (timeout or 0.35)
-        repeat
-            if progressionFingerprint() ~= before then return true end
-            task.wait(0.03)
-        until os.clock() >= deadline
-        return false
-    end
-
-    local function readPanelCode(host)
-        if not host then return nil end
-        for _, descendant in ipairs(host:GetDescendants()) do
-            local lower = string.lower(descendant.Name)
-            local value
-            if descendant:IsA("StringValue") then
-                value = descendant.Value
-            elseif descendant:IsA("IntValue") or descendant:IsA("NumberValue") then
-                value = tostring(descendant.Value)
-            elseif descendant:IsA("TextLabel") or descendant:IsA("TextBox") then
-                value = descendant.Text
-            end
-            if value and (lower:find("code", 1, true) or lower:find("password", 1, true) or lower:find("pin", 1, true)) then
-                local digits = tostring(value):gsub("%D", "")
-                if #digits >= 2 and #digits <= 8 then return digits end
-            end
-        end
-    end
-
-    local function readGlobalMapCode()
+    local function findCanonicalRoot(kind)
         local map = currentMapModel()
         if not map then return nil end
-
-        local found = {}
+        local names = canonicalRoots[kind]
+        if not names then return nil end
+        local best
+        local bestLength = math.huge
         for _, descendant in ipairs(map:GetDescendants()) do
-            local lower = string.lower(descendant.Name)
-            local value
-            if descendant:IsA("StringValue") then
-                value = descendant.Value
-            elseif descendant:IsA("IntValue") or descendant:IsA("NumberValue") then
-                value = tostring(descendant.Value)
-            elseif descendant:IsA("TextLabel") or descendant:IsA("TextBox") then
-                value = descendant.Text
-            end
-
-            if value and (lower:find("code", 1, true)
-                or lower:find("password", 1, true)
-                or lower:find("pin", 1, true)
-                or lower:find("digit", 1, true)) then
-                local digits = tostring(value):gsub("%D", "")
-                if #digits >= 2 and #digits <= 8 then
-                    found[digits] = true
+            if descendant:IsA("Model") or descendant:IsA("Folder") or descendant:IsA("BasePart") then
+                local name = token(descendant.Name)
+                for _, wanted in ipairs(names) do
+                    if name == wanted or name:find(wanted, 1, true) then
+                        local controls = controlsUnder(descendant)
+                        if #controls > 0 and #controls < bestLength then
+                            best = descendant
+                            bestLength = #controls
+                        end
+                    end
                 end
             end
         end
-
-        local only
-        local count = 0
-        for digits in pairs(found) do
-            only = digits
-            count += 1
-            if count > 1 then return nil end
-        end
-        return count == 1 and only or nil
-    end
-
-    local function panelDigitButtons(host)
-        local buttons = {}
-        if not host then return buttons end
-        for _, descendant in ipairs(host:GetDescendants()) do
-            if descendant:IsA("ClickDetector") then
-                local parent = descendant.Parent
-                local value = parent and parent.Name or ""
-                local label = parent and parent:FindFirstChildWhichIsA("TextLabel", true)
-                if label and tostring(label.Text):match("^%s*%d%s*$") then
-                    value = label.Text
-                end
-                local digit = tostring(value):match("(%d)")
-                if digit and #digit == 1 and not buttons[digit] then
-                    buttons[digit] = descendant
-                end
-            elseif descendant:IsA("ProximityPrompt") then
-                local value = tostring(descendant.ObjectText or descendant.ActionText or descendant.Parent.Name)
-                local digit = value:match("(%d)")
-                if digit and #digit == 1 and not buttons[digit] then
-                    buttons[digit] = descendant
-                end
-            end
-        end
-        return buttons
-    end
-
-    local function solveCodePanel(host)
-        local name = string.lower(host and host.Name or "")
-        if not (name:find("code", 1, true) or name:find("keypad", 1, true) or name:find("terminal", 1, true) or name:find("panel", 1, true)) then
-            return false
-        end
-        local code = readPanelCode(host) or readGlobalMapCode()
-        if not code then return false end
-        local buttons = panelDigitButtons(host)
-        for index = 1, #code do
-            local button = buttons[code:sub(index, index)]
-            if not button then return false end
-        end
-        for index = 1, #code do
-            local button = buttons[code:sub(index, index)]
-            if button:IsA("ClickDetector") and fireclickdetector then
-                pcall(fireclickdetector, button)
-            elseif button:IsA("ProximityPrompt") and fireproximityprompt then
-                pcall(fireproximityprompt, button)
-            end
-            task.wait(0.015)
-        end
-        return true
-    end
-
-    local puzzleBusy = false
-    local puzzleRetryAt = 0
-
-    local function controlPosition(control)
-        local parent = control and control.Parent
-        if parent and parent:IsA("BasePart") then return parent.Position end
-        local model = parent and parent:FindFirstAncestorOfClass("Model")
-        local part = model and getPart(model)
-        return part and part.Position
+        return best
     end
 
     local function uniqueControls(controls)
         local result = {}
         local seen = {}
         for _, control in ipairs(controls) do
-            local part = control.Parent
-            local key = part or control
-            if not seen[key] and controlPosition(control) then
-                seen[key] = true
+            local part = control and control.Parent
+            if part and not seen[part] and controlPosition(control) then
+                seen[part] = true
                 result[#result + 1] = control
             end
         end
         return result
     end
 
-    local function choosePuzzleControls(keywords, expected)
-        local controls = uniqueControls(collectMapControls(keywords))
-        if #controls <= expected then return controls end
-
-        table.sort(controls, function(a, b)
-            local ta = ancestorText(a, 4)
-            local tb = ancestorText(b, 4)
-            local sa = 0
-            local sb = 0
-            for _, word in ipairs(keywords) do
-                if ta:find(word, 1, true) then sa += 1 end
-                if tb:find(word, 1, true) then sb += 1 end
-            end
-            if sa == sb then
-                return tostring(a:GetFullName()) < tostring(b:GetFullName())
-            end
-            return sa > sb
-        end)
-
-        local result = {}
-        for index = 1, math.min(expected, #controls) do
-            result[index] = controls[index]
+    local function boundsScore(controls)
+        if #controls == 0 then return math.huge end
+        local minV = Vector3.new(math.huge, math.huge, math.huge)
+        local maxV = Vector3.new(-math.huge, -math.huge, -math.huge)
+        for _, control in ipairs(controls) do
+            local p = controlPosition(control)
+            if not p then return math.huge end
+            minV = Vector3.new(math.min(minV.X, p.X), math.min(minV.Y, p.Y), math.min(minV.Z, p.Z))
+            maxV = Vector3.new(math.max(maxV.X, p.X), math.max(maxV.Y, p.Y), math.max(maxV.Z, p.Z))
         end
+        return (maxV - minV).Magnitude
+    end
+
+    local function compactSubset(controls, expected)
+        controls = uniqueControls(controls)
+        if #controls <= expected then return controls end
+        local best
+        local bestScore = math.huge
+        for _, seed in ipairs(controls) do
+            local seedPos = controlPosition(seed)
+            local ranked = {}
+            for _, control in ipairs(controls) do
+                local pos = controlPosition(control)
+                if pos then
+                    ranked[#ranked + 1] = {Control = control, Distance = (pos - seedPos).Magnitude}
+                end
+            end
+            table.sort(ranked, function(a, b) return a.Distance < b.Distance end)
+            local group = {}
+            for index = 1, math.min(expected, #ranked) do
+                group[index] = ranked[index].Control
+            end
+            local score = boundsScore(group)
+            if #group == expected and score < bestScore then
+                best = group
+                bestScore = score
+            end
+        end
+        return best or {}
+    end
+
+    local function keywordScore(instance, keywords)
+        local text = ancestorText(instance, 6)
+        local score = 0
+        for _, word in ipairs(keywords or {}) do
+            if text:find(word, 1, true) then score += 1 end
+        end
+        return score
+    end
+
+    local function groupedControls(expected, keywords, allowDouble)
+        local _, events = mapAndEvents()
+        if not events then return {}, nil end
+        local controls = controlsUnder(events)
+        local groups = {}
+
+        for _, control in ipairs(controls) do
+            local current = control.Parent
+            for _ = 1, 6 do
+                if not current or current == events.Parent then break end
+                local group = groups[current]
+                if not group then
+                    group = {}
+                    groups[current] = group
+                end
+                group[#group + 1] = control
+                if current == events then break end
+                current = current.Parent
+            end
+        end
+
+        local bestControls
+        local bestRoot
+        local bestScore = math.huge
+
+        for root, group in pairs(groups) do
+            group = uniqueControls(group)
+            local count = #group
+            local countDelta = math.abs(count - expected)
+            if allowDouble then countDelta = math.min(countDelta, math.abs(count - expected * 2)) end
+            if count >= expected and count <= expected * 3 then
+                local words = keywordScore(root, keywords)
+                local score = countDelta * 1000 + boundsScore(group) - words * 250
+                if score < bestScore then
+                    bestControls = group
+                    bestRoot = root
+                    bestScore = score
+                end
+            end
+        end
+
+        if bestControls then return bestControls, bestRoot end
+        return compactSubset(controls, expected), events
+    end
+
+    local function selectPuzzleControls(kind, expected, keywords, allowDouble)
+        local root = findCanonicalRoot(kind)
+        if root then
+            local controls = controlsUnder(root)
+            if #controls >= expected then
+                return controls, root
+            end
+        end
+        return groupedControls(expected, keywords, allowDouble)
+    end
+
+    local function progressFingerprint()
+        local map = currentMapModel()
+        if not map then return "none" end
+        local chunks = {}
+        for value in pairs(requirements) do
+            if value.Parent then
+                chunks[#chunks + 1] = "r:" .. tostring(value.Value) .. ":" .. tostring(value.Parent)
+            end
+        end
+        for _, descendant in ipairs(map:GetDescendants()) do
+            if descendant:IsA("BasePart") then
+                local text = ancestorText(descendant, 4)
+                if text:find("door", 1, true)
+                    or text:find("exit", 1, true)
+                    or text:find("gate", 1, true)
+                    or text:find("barrier", 1, true)
+                    or text:find("safe", 1, true) then
+                    local p = descendant.Position
+                    chunks[#chunks + 1] = table.concat({
+                        "p", tostring(descendant),
+                        string.format("%.2f", p.X),
+                        string.format("%.2f", p.Y),
+                        string.format("%.2f", p.Z),
+                        tostring(descendant.CanCollide),
+                        string.format("%.2f", descendant.Transparency),
+                    }, ":")
+                end
+            elseif descendant:IsA("BoolValue") then
+                local n = string.lower(descendant.Name)
+                if n:find("open", 1, true)
+                    or n:find("unlock", 1, true)
+                    or n:find("complete", 1, true)
+                    or n:find("solved", 1, true) then
+                    chunks[#chunks + 1] = "b:" .. tostring(descendant) .. ":" .. tostring(descendant.Value)
+                end
+            end
+        end
+        table.sort(chunks)
+        return table.concat(chunks, "|")
+    end
+
+    local function localSolved(root)
+        if not root or not root.Parent then return true end
+        for _, descendant in ipairs(root:GetDescendants()) do
+            local value = normalizedShortValue(descendant)
+            if value then
+                local lower = string.lower(value)
+                if lower == "open"
+                    or lower == "opened"
+                    or lower == "correct"
+                    or lower == "complete"
+                    or lower == "completed"
+                    or lower == "unlocked"
+                    or lower == "solved" then
+                    return true
+                end
+            end
+            if descendant:IsA("BoolValue") and descendant.Value then
+                local n = string.lower(descendant.Name)
+                if n:find("open", 1, true)
+                    or n:find("unlock", 1, true)
+                    or n:find("complete", 1, true)
+                    or n:find("solved", 1, true) then
+                    return true
+                end
+            end
+        end
+        return false
+    end
+
+    local function waitForSolved(before, root, timeout)
+        local deadline = os.clock() + (timeout or 0.4)
+        repeat
+            if localSolved(root) then return true end
+            if progressFingerprint() ~= before then return true end
+            task.wait(0.02)
+        until os.clock() >= deadline
+        return false
+    end
+
+    local function planarCoordinates(positions)
+        local minX, minY, minZ = math.huge, math.huge, math.huge
+        local maxX, maxY, maxZ = -math.huge, -math.huge, -math.huge
+        for _, p in ipairs(positions) do
+            minX, minY, minZ = math.min(minX, p.X), math.min(minY, p.Y), math.min(minZ, p.Z)
+            maxX, maxY, maxZ = math.max(maxX, p.X), math.max(maxY, p.Y), math.max(maxZ, p.Z)
+        end
+        local ranges = {
+            {Axis = "X", Range = maxX - minX},
+            {Axis = "Y", Range = maxY - minY},
+            {Axis = "Z", Range = maxZ - minZ},
+        }
+        table.sort(ranges, function(a, b) return a.Range > b.Range end)
+        local a, b = ranges[1].Axis, ranges[2].Axis
+        local function coord(p, axis)
+            if axis == "X" then return p.X end
+            if axis == "Y" then return p.Y end
+            return p.Z
+        end
+        return function(p) return coord(p, a), coord(p, b) end
+    end
+
+    local function linearOrder(objects, positionGetter)
+        local positions = {}
+        for _, object in ipairs(objects) do
+            local p = positionGetter(object)
+            if not p then return objects end
+            positions[#positions + 1] = p
+        end
+        local a, b = positions[1], positions[1]
+        local maxDistance = -1
+        for i = 1, #positions do
+            for j = i + 1, #positions do
+                local d = (positions[i] - positions[j]).Magnitude
+                if d > maxDistance then
+                    maxDistance = d
+                    a, b = positions[i], positions[j]
+                end
+            end
+        end
+        local axis = b - a
+        if axis.Magnitude < 0.001 then return objects end
+        axis = axis.Unit
+        local absX, absY, absZ = math.abs(axis.X), math.abs(axis.Y), math.abs(axis.Z)
+        if (absX >= absY and absX >= absZ and axis.X < 0)
+            or (absY >= absX and absY >= absZ and axis.Y < 0)
+            or (absZ >= absX and absZ >= absY and axis.Z < 0) then
+            axis = -axis
+        end
+        table.sort(objects, function(left, right)
+            return positionGetter(left):Dot(axis) < positionGetter(right):Dot(axis)
+        end)
+        return objects
+    end
+
+    local function circularOrder(controls)
+        local entries = {}
+        local positions = {}
+        local center = Vector3.zero
+        for _, control in ipairs(controls) do
+            local p = controlPosition(control)
+            if p then
+                positions[#positions + 1] = p
+                center += p
+                entries[#entries + 1] = {Control = control, Position = p}
+            end
+        end
+        if #entries == 0 then return entries end
+        center /= #entries
+        local project = planarCoordinates(positions)
+        local cu, cv = project(center)
+        table.sort(entries, function(a, b)
+            local au, av = project(a.Position)
+            local bu, bv = project(b.Position)
+            return math.atan2(av - cv, au - cu) < math.atan2(bv - cv, bu - cu)
+        end)
+        return entries
+    end
+
+    local function gridOrder(objects, positionGetter)
+        if #objects ~= 9 then return objects end
+        local positions = {}
+        for _, object in ipairs(objects) do
+            local p = positionGetter(object)
+            if not p then return objects end
+            positions[#positions + 1] = p
+        end
+        local project = planarCoordinates(positions)
+        local entries = {}
+        for _, object in ipairs(objects) do
+            local u, v = project(positionGetter(object))
+            entries[#entries + 1] = {Object = object, U = u, V = v}
+        end
+        table.sort(entries, function(a, b)
+            if math.abs(a.V - b.V) > 0.5 then return a.V > b.V end
+            return a.U < b.U
+        end)
+        local result = {}
+        for index, entry in ipairs(entries) do result[index] = entry.Object end
         return result
     end
 
-    local function cyclePuzzle(keywords, expected, states, limit)
-        local controls = choosePuzzleControls(keywords, expected)
-        if #controls ~= expected then return false end
+    local function collapseSlotControls(controls, slots)
+        controls = uniqueControls(controls)
+        if #controls == slots then
+            return linearOrder(controls, controlPosition)
+        end
+        if #controls >= slots * 2 then
+            local unused = {}
+            for _, control in ipairs(controls) do unused[control] = true end
+            local chosen = {}
+            while #chosen < slots and next(unused) do
+                local first = next(unused)
+                unused[first] = nil
+                local firstPos = controlPosition(first)
+                local nearest
+                local nearestDistance = math.huge
+                for candidate in pairs(unused) do
+                    local pos = controlPosition(candidate)
+                    if pos then
+                        local d = (pos - firstPos).Magnitude
+                        if d < nearestDistance then
+                            nearest = candidate
+                            nearestDistance = d
+                        end
+                    end
+                end
+                if nearest then unused[nearest] = nil end
+                chosen[#chosen + 1] = first
+            end
+            if #chosen == slots then
+                return linearOrder(chosen, controlPosition)
+            end
+        end
+        return compactSubset(controls, slots)
+    end
 
-        local before = progressionFingerprint()
+    local function cyclePuzzleControls(controls, states, limit, root)
+        controls = collapseSlotControls(controls, #controls >= 3 and 3 or #controls)
+        if #controls == 0 then return false end
+        local before = progressFingerprint()
+        local maxSteps = limit or (states ^ #controls)
+        local counters = table.create(#controls, 0)
+        for _ = 1, maxSteps do
+            local carry = true
+            for index = 1, #controls do
+                if carry then
+                    clickControl(controls[index])
+                    counters[index] += 1
+                    if counters[index] >= states then
+                        counters[index] = 0
+                    else
+                        carry = false
+                    end
+                end
+            end
+            task.wait(0.005)
+            if localSolved(root) or progressFingerprint() ~= before then return true end
+        end
+        return false
+    end
+
+    local function cyclePuzzle(keywords, expected, states, limit, kind)
+        local controls, root = selectPuzzleControls(kind, expected, keywords, expected == 3)
+        controls = collapseSlotControls(controls, expected)
+        if #controls ~= expected then return false end
+        local before = progressFingerprint()
         local maxSteps = limit or (states ^ expected)
         local counters = table.create(expected, 0)
-
         for _ = 1, maxSteps do
             local carry = true
             for index = 1, expected do
@@ -2001,10 +2192,91 @@ return function(ctx)
                     end
                 end
             end
-            task.wait(0.008)
-            if progressionFingerprint() ~= before then return true end
+            task.wait(0.005)
+            if localSolved(root) or progressFingerprint() ~= before then return true end
         end
         return false
+    end
+
+    local function readPanelCode(host)
+        if not host then return nil end
+        local found = {}
+        for _, descendant in ipairs(host:GetDescendants()) do
+            local value = normalizedShortValue(descendant)
+            if value then
+                local digits = value:gsub("%D", "")
+                if #digits >= 2 and #digits <= 8 then
+                    found[digits] = true
+                end
+            end
+        end
+        local only
+        local count = 0
+        for digits in pairs(found) do
+            only = digits
+            count += 1
+            if count > 1 then return nil end
+        end
+        return only
+    end
+
+    local function readGlobalMapCode(exclude)
+        local map = currentMapModel()
+        if not map then return nil end
+        local found = {}
+        for _, descendant in ipairs(map:GetDescendants()) do
+            if not exclude or not descendant:IsDescendantOf(exclude) then
+                local value = normalizedShortValue(descendant)
+                local name = string.lower(descendant.Name)
+                if value and (name:find("code", 1, true)
+                    or name:find("password", 1, true)
+                    or name:find("pin", 1, true)
+                    or name:find("digit", 1, true)
+                    or ancestorText(descendant, 3):find("hint", 1, true)) then
+                    local digits = value:gsub("%D", "")
+                    if #digits >= 2 and #digits <= 8 then found[digits] = true end
+                end
+            end
+        end
+        local only
+        local count = 0
+        for digits in pairs(found) do
+            only = digits
+            count += 1
+            if count > 1 then return nil end
+        end
+        return only
+    end
+
+    local function numericButtons(host)
+        local buttons = {}
+        for _, control in ipairs(controlsUnder(host)) do
+            local source = tostring(control.Parent and control.Parent.Name or "")
+            if control:IsA("ProximityPrompt") then
+                source = source .. " " .. tostring(control.ObjectText or "") .. " " .. tostring(control.ActionText or "")
+            end
+            local label = control.Parent and control.Parent:FindFirstChildWhichIsA("TextLabel", true)
+            if label then source = source .. " " .. tostring(label.Text) end
+            local digit = source:match("(%d)")
+            if digit and #digit == 1 and not buttons[digit] then buttons[digit] = control end
+        end
+        return buttons
+    end
+
+    local function solveCodePanel(host)
+        if not host then return false end
+        local code = readPanelCode(host) or readGlobalMapCode(host)
+        if not code then return false end
+        local buttons = numericButtons(host)
+        for index = 1, #code do
+            if not buttons[code:sub(index, index)] then return false end
+        end
+        local before = progressFingerprint()
+        for index = 1, #code do
+            clickControl(buttons[code:sub(index, index)])
+            task.wait(0.02)
+        end
+        return waitForSolved(before, host, 0.45)
     end
 
     local puzzleColors = {
@@ -2021,220 +2293,452 @@ return function(ctx)
             local dr = color.R - reference.R
             local dg = color.G - reference.G
             local db = color.B - reference.B
-            local current = dr * dr + dg * dg + db * db
-            if current < distance then
+            local d = dr * dr + dg * dg + db * db
+            if d < distance then
                 best = name
-                distance = current
+                distance = d
             end
         end
+        return best, distance
+    end
+
+    local function coloredPartCandidates(exclude)
+        local map = currentMapModel()
+        local result = {}
+        if not map then return result end
+        for _, part in ipairs(map:GetDescendants()) do
+            if part:IsA("BasePart") and (not exclude or not part:IsDescendantOf(exclude)) then
+                local colorName, distance = nearestPuzzleColor(part.Color)
+                local light = part:FindFirstChildWhichIsA("PointLight", true)
+                    or part:FindFirstChildWhichIsA("SurfaceLight", true)
+                local text = ancestorText(part, 4)
+                if distance < 0.36
+                    and part.Transparency < 0.9
+                    and (part.Material == Enum.Material.Neon
+                        or light
+                        or text:find("screen", 1, true)
+                        or text:find("monitor", 1, true)
+                        or text:find("display", 1, true)
+                        or text:find("control", 1, true)) then
+                    result[#result + 1] = {Part = part, Color = colorName}
+                end
+            end
+        end
+        return result
+    end
+
+    local function coloredGroupOfFour(exclude)
+        local candidates = coloredPartCandidates(exclude)
+        local groups = {}
+        for _, entry in ipairs(candidates) do
+            local current = entry.Part.Parent
+            for _ = 1, 5 do
+                if not current or current == workspace then break end
+                local group = groups[current]
+                if not group then group = {}; groups[current] = group end
+                group[#group + 1] = entry
+                current = current.Parent
+            end
+        end
+        local best
+        local bestScore = math.huge
+        for root, entries in pairs(groups) do
+            local unique = {}
+            local seen = {}
+            for _, entry in ipairs(entries) do
+                if not seen[entry.Part] then
+                    seen[entry.Part] = true
+                    unique[#unique + 1] = entry
+                end
+            end
+            if #unique >= 4 and #unique <= 8 then
+                local parts = {}
+                for _, entry in ipairs(unique) do parts[#parts + 1] = entry.Part end
+                local score = math.abs(#unique - 4) * 1000 + boundsScore((function()
+                    local fake = {}
+                    for _, part in ipairs(parts) do
+                        local control = part:FindFirstChildWhichIsA("ClickDetector") or part:FindFirstChildWhichIsA("ProximityPrompt")
+                        if control then fake[#fake + 1] = control end
+                    end
+                    return fake
+                end)()) - keywordScore(root, {"control", "monitor", "screen", "display"}) * 200
+                if score < bestScore then
+                    best = unique
+                    bestScore = score
+                end
+            end
+        end
+        if not best then return nil end
+        while #best > 4 do table.remove(best) end
         return best
     end
 
-    local function dominantOrder(parts)
-        if #parts <= 1 then return parts end
-        local a = parts[1]
-        local b = parts[2]
-        local maxDistance = 0
-        for i = 1, #parts do
-            for j = i + 1, #parts do
-                local distance = (parts[i].Position - parts[j].Position).Magnitude
-                if distance > maxDistance then
-                    maxDistance = distance
-                    a = parts[i]
-                    b = parts[j]
-                end
-            end
-        end
-        local axis = b.Position - a.Position
-        if axis.Magnitude < 0.01 then return parts end
-        axis = axis.Unit
-        table.sort(parts, function(left, right)
-            return (left.Position - a.Position):Dot(axis) < (right.Position - a.Position):Dot(axis)
-        end)
-        return parts
-    end
-
     local function solveShipColorCode()
-        local map = currentMapModel()
-        if not map then return false end
+        local pad = findCanonicalRoot("ColorCode")
+        local padControls = pad and controlsUnder(pad) or selectPuzzleControls("ColorCode", 4, {"color", "code", "button"}, false)
+        padControls = uniqueControls(padControls)
+        if #padControls < 4 then return false end
 
-        local monitors = {}
-        for _, descendant in ipairs(map:GetDescendants()) do
-            if descendant:IsA("BasePart") then
-                local text = ancestorText(descendant, 4)
-                if (text:find("control", 1, true) or text:find("monitor", 1, true) or text:find("panel", 1, true))
-                    and descendant.Transparency < 0.9 then
-                    local colorName = nearestPuzzleColor(descendant.Color)
-                    if colorName then
-                        local brightness = math.max(descendant.Color.R, descendant.Color.G, descendant.Color.B)
-                        if brightness >= 0.45 then
-                            monitors[#monitors + 1] = {Part = descendant, Color = colorName}
-                        end
-                    end
-                end
-            end
-        end
-
-        local dedup = {}
-        local monitorParts = {}
-        for _, entry in ipairs(monitors) do
-            local model = entry.Part:FindFirstAncestorOfClass("Model") or entry.Part
-            if not dedup[model] then
-                dedup[model] = entry
-                monitorParts[#monitorParts + 1] = entry.Part
-            end
-        end
-        if #monitorParts < 4 then return false end
-
-        dominantOrder(monitorParts)
-        local sequence = {}
-        for _, part in ipairs(monitorParts) do
-            local model = part:FindFirstAncestorOfClass("Model") or part
-            local entry = dedup[model]
-            if entry then
-                sequence[#sequence + 1] = entry.Color
-                if #sequence == 4 then break end
-            end
-        end
-        if #sequence ~= 4 then return false end
-
-        local controls = collectMapControls({"color", "code", "keypad", "button"})
         local byColor = {}
-        for _, control in ipairs(controls) do
+        for _, control in ipairs(padControls) do
             local part = control.Parent
             if part and part:IsA("BasePart") then
-                byColor[nearestPuzzleColor(part.Color)] = byColor[nearestPuzzleColor(part.Color)] or control
+                local name, distance = nearestPuzzleColor(part.Color)
+                if distance < 0.45 and not byColor[name] then byColor[name] = control end
             end
         end
-        for _, colorName in ipairs(sequence) do
-            if not byColor[colorName] then return false end
-        end
+        if not (byColor.Red and byColor.Yellow and byColor.Blue and byColor.Green) then return false end
 
-        local before = progressionFingerprint()
-        for _, colorName in ipairs(sequence) do
-            clickControl(byColor[colorName])
-            task.wait(0.025)
+        local clues = coloredGroupOfFour(pad)
+        if not clues or #clues ~= 4 then return false end
+        local parts = {}
+        local colorByPart = {}
+        for _, entry in ipairs(clues) do
+            parts[#parts + 1] = entry.Part
+            colorByPart[entry.Part] = entry.Color
         end
-        return waitForProgress(before, 0.5)
+        linearOrder(parts, function(part) return part.Position end)
+
+        local forward = {}
+        for _, part in ipairs(parts) do forward[#forward + 1] = colorByPart[part] end
+        local reverse = {}
+        for index = #forward, 1, -1 do reverse[#reverse + 1] = forward[index] end
+
+        local before = progressFingerprint()
+        for _, sequence in ipairs({forward, reverse}) do
+            for _, colorName in ipairs(sequence) do
+                clickControl(byColor[colorName])
+                task.wait(0.035)
+            end
+            if waitForSolved(before, pad, 0.55) then return true end
+            task.wait(0.15)
+        end
+        return false
     end
 
     local function partLit(part)
         if not part or not part:IsA("BasePart") then return false end
         local light = part:FindFirstChildWhichIsA("PointLight", true)
             or part:FindFirstChildWhichIsA("SurfaceLight", true)
-        if light and light.Enabled then return true end
-        if part.Material == Enum.Material.Neon then return true end
-        return math.max(part.Color.R, part.Color.G, part.Color.B) > 0.72
-    end
-
-    local function solveCampLightCircle()
-        local controls = choosePuzzleControls({"light", "circle", "puzzle", "roulette", "button"}, 8)
-        if #controls ~= 8 then return false end
-
-        local center = Vector3.zero
-        local entries = {}
-        for _, control in ipairs(controls) do
-            local position = controlPosition(control)
-            if not position then return false end
-            center += position
-            entries[#entries + 1] = {Control = control, Position = position, Part = control.Parent}
-        end
-        center /= #entries
-
-        table.sort(entries, function(a, b)
-            local aa = math.atan2(a.Position.Z - center.Z, a.Position.X - center.X)
-            local bb = math.atan2(b.Position.Z - center.Z, b.Position.X - center.X)
-            return aa < bb
-        end)
-
-        local startIndex = 1
-        for index, entry in ipairs(entries) do
-            if partLit(entry.Part) then
-                startIndex = index
-                break
-            end
-        end
-
-        local before = progressionFingerprint()
-        for _, direction in ipairs({1, -1}) do
-            for _, offset in ipairs({2, 5, 6}) do
-                local index = ((startIndex - 1 + direction * offset) % 8) + 1
-                clickControl(entries[index].Control)
-                task.wait(0.025)
-            end
-            if waitForProgress(before, 0.25) then return true end
+        if light and light.Enabled and light.Brightness > 0 then return true end
+        if part.Material == Enum.Material.Neon then
+            return math.max(part.Color.R, part.Color.G, part.Color.B) > 0.55
         end
         return false
     end
 
-    local function solveLabLevers()
-        local controls = choosePuzzleControls({"lever", "switch"}, 9)
-        if #controls ~= 9 then return false end
-
-        local before = progressionFingerprint()
-        local previousGray = 0
-        for step = 1, 511 do
-            local gray = bit32.bxor(step, bit32.rshift(step, 1))
-            local changed = bit32.bxor(gray, previousGray)
-            previousGray = gray
-            local bit = 0
-            while bit < 9 do
-                if bit32.band(changed, bit32.lshift(1, bit)) ~= 0 then
-                    clickControl(controls[bit + 1])
-                    break
-                end
-                bit += 1
-            end
-            task.wait(0.006)
-            if step % 8 == 0 and progressionFingerprint() ~= before then return true end
+    local function campSolved(root, entries)
+        local lit = 0
+        for _, entry in ipairs(entries) do
+            if partLit(entry.Control.Parent) then lit += 1 end
         end
-        return progressionFingerprint() ~= before
-    end
-
-    local function solveSpecialPuzzle()
-        local profile = mapProfiles[currentMapName()]
-        local puzzle = profile and profile.Puzzle
-        if not puzzle or puzzleBusy or os.clock() < puzzleRetryAt then return false end
-
-        puzzleBusy = true
-        local ok, solved = pcall(function()
-            if puzzle == "DigitCode" then
-                local map = currentMapModel()
-                if map then
-                    for _, descendant in ipairs(map:GetDescendants()) do
-                        if descendant:IsA("Model") or descendant:IsA("BasePart") then
-                            if solveCodePanel(descendant) then return true end
+        if lit == 0 then return true end
+        if root then
+            for _, part in ipairs(root:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    local n = string.lower(part.Name)
+                    if n:find("center", 1, true) or n:find("middle", 1, true) or n:find("indicator", 1, true) then
+                        if part.Color.G > part.Color.R * 1.3 and part.Color.G > part.Color.B * 1.3 then
+                            return true
                         end
                     end
                 end
-                return cyclePuzzle({"digit", "number", "code", "keypad"}, 3, 10, 1000)
-            elseif puzzle == "ColorCode" then
-                return solveShipColorCode()
-            elseif puzzle == "RomanCode" then
-                return cyclePuzzle({"roman", "numeral", "code", "puzzle"}, 3, 4, 64)
-            elseif puzzle == "ShapeWheel" then
-                return cyclePuzzle({"shape", "wheel", "symbol", "puzzle"}, 3, 4, 64)
-            elseif puzzle == "LightCircle" then
-                return solveCampLightCircle()
-            elseif puzzle == "ReactorLevers" then
-                return solveLabLevers()
             end
-            return false
-        end)
-
-        puzzleBusy = false
-        if not ok or not solved then
-            puzzleRetryAt = os.clock() + 1.25
-            return false
         end
-        puzzleRetryAt = os.clock() + 0.25
-        return true
+        return false
     end
 
+    local function solveCampLightCircle()
+        local controls, root = selectPuzzleControls("LightCircle", 8, {"light", "circle", "roulette", "button"}, false)
+        controls = compactSubset(controls, 8)
+        if #controls ~= 8 then return false end
+        local entries = circularOrder(controls)
+        if #entries ~= 8 then return false end
 
-        return solveCodePanel, solveSpecialPuzzle
-    end)()
+        local startIndex
+        local bestBrightness = -1
+        for index, entry in ipairs(entries) do
+            local part = entry.Control.Parent
+            if part and part:IsA("BasePart") then
+                local brightness = math.max(part.Color.R, part.Color.G, part.Color.B)
+                if partLit(part) and brightness > bestBrightness then
+                    startIndex = index
+                    bestBrightness = brightness
+                end
+            end
+        end
+        if not startIndex then return false end
 
+        local before = progressFingerprint()
+        for _, direction in ipairs({1, -1}) do
+            local clicked = {}
+            for _, offset in ipairs({2, 5, 6}) do
+                local index = ((startIndex - 1 + direction * offset) % 8) + 1
+                clicked[#clicked + 1] = entries[index].Control
+                clickControl(entries[index].Control)
+                task.wait(0.03)
+            end
+            if campSolved(root, entries) or waitForSolved(before, root, 0.3) then return true end
+            for _, control in ipairs(clicked) do
+                clickControl(control)
+                task.wait(0.02)
+            end
+        end
+
+        local previousGray = 0
+        for step = 1, 255 do
+            local gray = bit32.bxor(step, bit32.rshift(step, 1))
+            local changed = bit32.bxor(gray, previousGray)
+            previousGray = gray
+            for bit = 0, 7 do
+                if bit32.band(changed, bit32.lshift(1, bit)) ~= 0 then
+                    clickControl(entries[bit + 1].Control)
+                    break
+                end
+            end
+            task.wait(0.006)
+            if campSolved(root, entries) or progressFingerprint() ~= before then return true end
+        end
+        return false
+    end
+
+    local function colorIsGreen(part)
+        return part
+            and part:IsA("BasePart")
+            and part.Color.G > 0.45
+            and part.Color.G > part.Color.R * 1.25
+            and part.Color.G > part.Color.B * 1.15
+    end
+
+    local function findLabGrid()
+        local root = findCanonicalRoot("ReactorGrid")
+        local map = currentMapModel()
+        local searchRoot = root or map
+        if not searchRoot then return nil, {} end
+
+        local candidates = {}
+        for _, part in ipairs(searchRoot:GetDescendants()) do
+            if part:IsA("BasePart") then
+                local green = colorIsGreen(part)
+                local red = part.Color.R > 0.4 and part.Color.R > part.Color.G * 1.2
+                if green or red then candidates[#candidates + 1] = part end
+            end
+        end
+
+        local groups = {}
+        for _, part in ipairs(candidates) do
+            local current = part.Parent
+            for _ = 1, 5 do
+                if not current or current == workspace then break end
+                local group = groups[current]
+                if not group then group = {}; groups[current] = group end
+                group[#group + 1] = part
+                current = current.Parent
+            end
+        end
+
+        local bestRoot
+        local bestParts
+        local bestScore = math.huge
+        for groupRoot, parts in pairs(groups) do
+            local unique = {}
+            local seen = {}
+            for _, part in ipairs(parts) do
+                if not seen[part] then seen[part] = true; unique[#unique + 1] = part end
+            end
+            if #unique >= 9 and #unique <= 12 then
+                local score = math.abs(#unique - 9) * 1000 - keywordScore(groupRoot, {"square", "grid", "panel", "code"}) * 250
+                if score < bestScore then
+                    bestRoot = groupRoot
+                    bestParts = unique
+                    bestScore = score
+                end
+            end
+        end
+
+        if not bestParts then return root, {} end
+        while #bestParts > 9 do table.remove(bestParts) end
+        return bestRoot or root, gridOrder(bestParts, function(part) return part.Position end)
+    end
+
+    local function activateLabPower()
+        local _, events = mapAndEvents()
+        if not events then return false end
+        local candidates = {}
+        for _, control in ipairs(controlsUnder(events)) do
+            local text = ancestorText(control, 6)
+            if text:find("aux", 1, true)
+                or text:find("power", 1, true)
+                or text:find("reactor", 1, true) then
+                candidates[#candidates + 1] = control
+            end
+        end
+        local used = {}
+        for _, control in ipairs(candidates) do
+            local host = control.Parent
+            if host and not used[host] then
+                used[host] = true
+                clickControl(control)
+                task.wait(0.15)
+                if table.getn(used) >= 2 then break end
+            end
+        end
+        if next(used) then
+            task.wait(4.2)
+            return true
+        end
+        return false
+    end
+
+    local function transformGridIndex(index, transform)
+        local row = math.floor((index - 1) / 3)
+        local col = (index - 1) % 3
+        local r, c = row, col
+        if transform >= 4 then c = 2 - c end
+        local rotations = transform % 4
+        for _ = 1, rotations do
+            r, c = c, 2 - r
+        end
+        return r * 3 + c + 1
+    end
+
+    local function solveLabLevers()
+        local gridRoot, grid = findLabGrid()
+        if #grid ~= 9 then
+            activateLabPower()
+            gridRoot, grid = findLabGrid()
+        end
+        if #grid ~= 9 then return false end
+
+        local green = {}
+        for index, part in ipairs(grid) do
+            if colorIsGreen(part) then green[#green + 1] = index end
+        end
+        if #green ~= 3 then
+            activateLabPower()
+            gridRoot, grid = findLabGrid()
+            green = {}
+            for index, part in ipairs(grid) do
+                if colorIsGreen(part) then green[#green + 1] = index end
+            end
+        end
+        if #green ~= 3 then return false end
+
+        local controls, leverRoot = selectPuzzleControls(nil, 9, {"lever", "switch"}, false)
+        controls = uniqueControls(controls)
+        local filtered = {}
+        for _, control in ipairs(controls) do
+            if not gridRoot or not control:IsDescendantOf(gridRoot) then filtered[#filtered + 1] = control end
+        end
+        if #filtered < 9 then
+            filtered = compactSubset(controls, 9)
+        elseif #filtered > 9 then
+            filtered = compactSubset(filtered, 9)
+        end
+        if #filtered ~= 9 then return false end
+        local ordered = gridOrder(filtered, controlPosition)
+        if #ordered ~= 9 then return false end
+
+        local before = progressFingerprint()
+        for transform = 0, 7 do
+            local chosen = {}
+            for _, index in ipairs(green) do
+                chosen[#chosen + 1] = ordered[transformGridIndex(index, transform)]
+            end
+            for _, control in ipairs(chosen) do
+                clickControl(control)
+                task.wait(0.04)
+            end
+            if waitForSolved(before, leverRoot, 0.45) then return true end
+            for _, control in ipairs(chosen) do
+                clickControl(control)
+                task.wait(0.025)
+            end
+        end
+        return false
+    end
+
+    local function solveDigitCode()
+        local root = findCanonicalRoot("DigitCode")
+        if root and solveCodePanel(root) then return true end
+        local controls, groupRoot = selectPuzzleControls("DigitCode", 3, {"digit", "number", "code", "keypad"}, true)
+        controls = collapseSlotControls(controls, 3)
+        if #controls ~= 3 then return false end
+        return cyclePuzzle({"digit", "number", "code", "keypad"}, 3, 10, 1000, "DigitCode")
+    end
+
+    local function solveRomanCode()
+        local controls, root = selectPuzzleControls("RomanCode", 3, {"roman", "numeral", "code"}, true)
+        controls = collapseSlotControls(controls, 3)
+        if #controls ~= 3 then return false end
+        local before = progressFingerprint()
+        local counters = {0, 0, 0}
+        for _ = 1, 64 do
+            local carry = true
+            for index = 1, 3 do
+                if carry then
+                    clickControl(controls[index])
+                    counters[index] += 1
+                    if counters[index] >= 4 then counters[index] = 0 else carry = false end
+                end
+            end
+            task.wait(0.008)
+            if localSolved(root) or progressFingerprint() ~= before then return true end
+        end
+        return false
+    end
+
+    local function solveShapeWheel()
+        local controls, root = selectPuzzleControls("ShapeWheel", 3, {"shape", "wheel", "symbol"}, true)
+        controls = collapseSlotControls(controls, 3)
+        if #controls ~= 3 then return false end
+        local before = progressFingerprint()
+        local counters = {0, 0, 0}
+        for _ = 1, 64 do
+            local carry = true
+            for index = 1, 3 do
+                if carry then
+                    clickControl(controls[index])
+                    counters[index] += 1
+                    if counters[index] >= 4 then counters[index] = 0 else carry = false end
+                end
+            end
+            task.wait(0.008)
+            if localSolved(root) or progressFingerprint() ~= before then return true end
+        end
+        return false
+    end
+
+    local function solveSpecialPuzzle()
+        local mapName = currentMapName()
+        local profile = mapProfiles[mapName]
+        local puzzle = profile and profile.Puzzle
+        if not puzzle or solvedPuzzles[mapName .. ":" .. puzzle] then return false end
+        if puzzleBusy or os.clock() < puzzleRetryAt then return false end
+
+        puzzleBusy = true
+        local ok, solved = pcall(function()
+            if puzzle == "DigitCode" then return solveDigitCode() end
+            if puzzle == "ColorCode" then return solveShipColorCode() end
+            if puzzle == "RomanCode" then return solveRomanCode() end
+            if puzzle == "ShapeWheel" then return solveShapeWheel() end
+            if puzzle == "LightCircle" then return solveCampLightCircle() end
+            if puzzle == "ReactorLevers" then return solveLabLevers() end
+            return false
+        end)
+        puzzleBusy = false
+
+        if ok and solved then
+            solvedPuzzles[mapName .. ":" .. puzzle] = true
+            puzzleRetryAt = os.clock() + 0.2
+            return true
+        end
+        puzzleRetryAt = os.clock() + 0.8
+        return false
+    end
+
+    return solveCodePanel, solveSpecialPuzzle
+end)()
     local function isFreeProgressInteraction(interactive)
         if not interactive or not interactive.Parent then return false end
         if itemObjectFrom(interactive) or belongsToItem(interactive) then return false end
