@@ -1698,6 +1698,7 @@ return function(ctx)
         return table.concat(chunks, " ")
     end
 
+    local solveCodePanel, solveSpecialPuzzle = (function()
     local function shortValue(instance)
         if instance:IsA("StringValue") then
             return tostring(instance.Value)
@@ -2229,6 +2230,10 @@ return function(ctx)
         puzzleRetryAt = os.clock() + 0.25
         return true
     end
+
+
+        return solveCodePanel, solveSpecialPuzzle
+    end)()
 
     local function isFreeProgressInteraction(interactive)
         if not interactive or not interactive.Parent then return false end
