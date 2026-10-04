@@ -215,6 +215,12 @@ return function(ctx)
         if not noclip then setAutomationCollision(false) end
     end
 
+    local function releaseAutomation()
+        autoCompleteBusy = false
+        pickupBusy = false
+        endAutomationMove()
+    end
+
     scope:Connect(RunService.PreSimulation, function()
         if not automationActive then return end
         if automationDeadline > 0 and os.clock() > automationDeadline then
@@ -1856,7 +1862,7 @@ return function(ctx)
             refreshObjectiveState()
         end)
 
-        autoCompleteBusy = false
+        releaseAutomation()
 
         if not ok then
             lastPickupStatus = "solver recovered: " .. tostring(errorMessage)
@@ -2130,6 +2136,7 @@ return function(ctx)
         setupObjectiveHelper(rage)
         rage:CreateToggle("Auto Object / Full run", false, function(value)
             autoComplete = value
+            releaseAutomation()
             if value then
                 autoGrab = false
                 autoInteract = false
@@ -2142,6 +2149,7 @@ return function(ctx)
         end)
         rage:CreateToggle("Auto grab items", false, function(value)
             autoGrab = value
+            releaseAutomation()
             if value then
                 autoComplete = false
                 autoInteract = false
@@ -2157,6 +2165,7 @@ return function(ctx)
         end)
         rage:CreateToggle("Auto interact", false, function(value)
             autoInteract = value
+            releaseAutomation()
             if value then
                 autoComplete = false
                 autoGrab = false
@@ -2238,6 +2247,10 @@ return function(ctx)
     end)
 
     scope:AddRestore(function()
+        autoComplete = false
+        autoGrab = false
+        autoInteract = false
+        releaseAutomation()
         clearKind()
         setCharacterTouch(false)
         restoreEnemyTouchTransmitters()
