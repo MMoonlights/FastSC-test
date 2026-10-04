@@ -191,9 +191,9 @@ for token in [
     "FencingSword",
     "RedEgg",
     "GreenEgg",
-    'map == "Gallery"',
-    'itemStagePresent("RedEgg")',
-    'itemStagePresent("GreenEgg")',
+    "mapProfiles",
+    'Present = {"RedEgg", "GreenEgg", "BlueEgg"}',
+    'Factory = {',
     'scope:Loop("autoComplete", 0.05',
 ]:
     assert token in piggy, token
