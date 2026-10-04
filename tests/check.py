@@ -177,10 +177,18 @@ for token in [
     'Puzzle = "ShapeWheel"',
     'Puzzle = "LightCircle"',
     'Puzzle = "ReactorLevers"',
+    "PuzzleBefore",
     "solveSpecialPuzzle",
     "solveShipColorCode",
     "solveCampLightCircle",
     "solveLabLevers",
+    "findCanonicalRoot",
+    "groupedControls",
+    "selectPuzzleControls",
+    "compactSubset",
+    "progressFingerprint",
+    "waitForSolved",
+    "ReactorGrid",
     "cyclePuzzle",
     "solveCodePanel",
     "beginAutomationMove",
@@ -226,6 +234,8 @@ assert "scope:Connect(RunService.Heartbeat" not in piggy
 assert "PathfindingService" not in piggy
 assert "computeReachable" not in piggy
 assert "reachabilityPending" not in piggy
+assert 'PuzzleBefore = {"WhiteKey"}' in piggy
+assert 'PuzzleBefore = {"ElevatorKey"}' in piggy
 assert "escapeTouchOverride" in piggy
 assert "nearEscapeTrigger" in piggy
 assert "isEscapeRelatedPart" in piggy
