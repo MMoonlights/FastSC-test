@@ -15,6 +15,7 @@ return function(ctx)
     local visuals = {}
     local requirements = {}
     local escapeTargets = {}
+    local escapeTouchOverride = false
     local selectedItem
     local infiniteJump = false
     local itemEsp = false
@@ -1793,6 +1794,40 @@ return function(ctx)
         return ok and (completed or touched)
     end
 
+    local function isEscapeRelatedPart(part)
+        if not part or not part.Parent then return false end
+        if escapeTargets[part] then return true end
+
+        local current = part
+        for _ = 1, 4 do
+            if not current or current == workspace then break end
+            local lower = string.lower(current.Name)
+            if lower:find("escape", 1, true)
+                or lower:find("exit", 1, true)
+                or lower:find("final", 1, true) then
+                return true
+            end
+            current = current.Parent
+        end
+
+        return false
+    end
+
+    local function nearEscapeTrigger(distanceLimit)
+        local character = localPlayer.Character
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+        if not root then return false end
+
+        local limit = distanceLimit or 12
+        for part in pairs(escapeTargets) do
+            if part.Parent and (part.Position - root.Position).Magnitude <= limit then
+                return true, part
+            end
+        end
+
+        return false
+    end
+
     local function autoEscapeStep()
         local root = Common.Root()
         local best
@@ -1819,15 +1854,37 @@ return function(ctx)
             end
         end
         if not best then return false end
+
+        escapeTouchOverride = true
+        setCharacterTouch(false)
+
         beginAutomationMove(best.CFrame + Vector3.new(0, 2, 0))
         task.wait(0.025)
-        if firetouchinterest then Common.Touch(root, best) end
+
+        local character = localPlayer.Character
+        if character then
+            for _, bodyPart in ipairs(character:GetDescendants()) do
+                if bodyPart:IsA("BasePart") then
+                    scope:Restore(bodyPart, "CanTouch")
+                end
+            end
+        end
+
+        if firetouchinterest then
+            for _ = 1, 3 do
+                Common.Touch(root, best)
+                task.wait(0.04)
+            end
+        end
+
         local click = best:FindFirstChildWhichIsA("ClickDetector", true)
         local prompt = best:FindFirstChildWhichIsA("ProximityPrompt", true)
         if click and fireclickdetector then pcall(fireclickdetector, click) end
         if prompt and fireproximityprompt then pcall(fireproximityprompt, prompt) end
-        task.wait(0.05)
+
+        task.wait(0.2)
         endAutomationMove()
+        escapeTouchOverride = false
         return true
     end
 
@@ -1932,7 +1989,14 @@ return function(ctx)
 
     local function applyGodMode()
         if not godMode then return end
-        setCharacterTouch(true)
+
+        local allowEscapeTouch = escapeTouchOverride or nearEscapeTrigger(12)
+        if allowEscapeTouch then
+            setCharacterTouch(false)
+        else
+            setCharacterTouch(true)
+        end
+
         for bot in pairs(bots) do
             disableEnemyTouchTransmitters(bot)
         end
@@ -1972,7 +2036,9 @@ return function(ctx)
     local function applyTrapBypass(value)
         for trap in pairs(traps) do
             if trap.Parent then
-                if value then
+                if isEscapeRelatedPart(trap) then
+                    scope:Restore(trap, "CanTouch")
+                elseif value then
                     scope:Set(trap, "CanTouch", false)
                 else
                     scope:Restore(trap, "CanTouch")
@@ -2237,7 +2303,7 @@ return function(ctx)
         if speedEnabled and humanoid then scope:Set(humanoid, "WalkSpeed", speedValue) end
         if jumpEnabled and humanoid then scope:Set(humanoid, "JumpPower", jumpValue) end
         if noclip then applyNoclip() end
-        if godMode then setCharacterTouch(true) end
+        if godMode then applyGodMode() end
     end)
 
     scope:Loop("rageRefresh", 0.5, function()
@@ -2250,6 +2316,7 @@ return function(ctx)
         autoComplete = false
         autoGrab = false
         autoInteract = false
+        escapeTouchOverride = false
         releaseAutomation()
         clearKind()
         setCharacterTouch(false)
