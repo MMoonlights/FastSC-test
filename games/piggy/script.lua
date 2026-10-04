@@ -397,13 +397,16 @@ return function(ctx)
                 WhiteKey = {"Hammer", "Wrench"},
                 Gas = {"Battery"},
             },
+            Counters = {
+                Battery = 2,
+            },
         },
         Gallery = {
             Gates = {
-                WhiteKey = {Present = {"RedEgg", "GreenEgg", "BlueEgg"}},
+                WhiteKey = {Present = {"RedEgg", "GreenEgg"}},
             },
             Depends = {
-                WhiteKey = {"RedEgg", "GreenEgg", "BlueEgg", "Hammer", "Wrench"},
+                WhiteKey = {"RedEgg", "GreenEgg", "Hammer", "Wrench"},
             },
         },
         Forest = {
@@ -436,6 +439,9 @@ return function(ctx)
                 BlueKeycard = {"Coin"},
                 WhiteKey = {"BlueKeycard"},
             },
+            Counters = {
+                Coin = 2,
+            },
         },
         Carnival = {
             Gates = {
@@ -464,6 +470,9 @@ return function(ctx)
             Depends = {
                 WhiteKey = {"Coin", "Crowbar"},
             },
+            Counters = {
+                Coin = 2,
+            },
         },
         Outpost = {
             Gates = {
@@ -490,6 +499,10 @@ return function(ctx)
                 WhiteKey = {"Torch"},
                 Mallet = {"Coin"},
             },
+            Counters = {
+                Battery = 2,
+                Coin = 2,
+            },
         },
         Alleys = {
             Depends = {
@@ -503,6 +516,9 @@ return function(ctx)
             Depends = {
                 YellowKey = {"RemoteControl"},
                 Ladder = {"YellowKey"},
+            },
+            Counters = {
+                Battery = 2,
             },
         },
         Refinery = {
@@ -524,6 +540,9 @@ return function(ctx)
                 Mop = {"WhiteGear", "Screwdriver"},
                 WhiteKey = {"Mop", "Screwdriver"},
             },
+            Counters = {
+                WhiteGear = 2,
+            },
         },
         Factory = {
             Counters = {
@@ -533,6 +552,9 @@ return function(ctx)
         Port = {
             Depends = {
                 GrapplingHook = {"YellowKey"},
+            },
+            Counters = {
+                Battery = 4,
             },
         },
         Ship = {
@@ -550,11 +572,7 @@ return function(ctx)
                 WhiteKey = {"Candle", "Shovel", "Hammer", "Plank"},
             },
         },
-        Camp = {
-            Depends = {
-                ElevatorKey = {"TNT"},
-            },
-        },
+        Camp = {},
         Lab = {
             Depends = {
                 BlueKeycard = {"Wrench"},
