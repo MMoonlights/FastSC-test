@@ -1822,6 +1822,19 @@ return function(ctx)
             end)
             return true
         end
+        if control:IsA("TouchTransmitter") and firetouchinterest then
+            local part = control.Parent
+            local character = localPlayer.Character
+            local root = character and character:FindFirstChild("HumanoidRootPart")
+            if part and part:IsA("BasePart") and root then
+                pcall(function()
+                    firetouchinterest(root, part, 0)
+                    task.wait(0.01)
+                    firetouchinterest(root, part, 1)
+                end)
+                return true
+            end
+        end
         return false
     end
 
@@ -1830,7 +1843,9 @@ return function(ctx)
         local seen = {}
         if not root then return result end
         for _, descendant in ipairs(root:GetDescendants()) do
-            if descendant:IsA("ClickDetector") or descendant:IsA("ProximityPrompt") then
+            if descendant:IsA("ClickDetector")
+                or descendant:IsA("ProximityPrompt")
+                or descendant:IsA("TouchTransmitter") then
                 local part = descendant.Parent
                 if part and not seen[part] and controlPosition(descendant) then
                     seen[part] = true
