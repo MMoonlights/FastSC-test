@@ -2840,12 +2840,13 @@ return function(ctx)
         return false
     end
 
-    local function solveSpecialPuzzle()
+    local function solveSpecialPuzzle(force)
         local mapName = currentMapName()
         local profile = mapProfiles[mapName]
         local puzzle = profile and profile.Puzzle
-        if not puzzle or solvedPuzzles[mapName .. ":" .. puzzle] then return false end
-        if puzzleBusy or os.clock() < puzzleRetryAt then return false end
+        if not puzzle then return false end
+        if solvedPuzzles[mapName .. ":" .. puzzle] and not force then return false end
+        if puzzleBusy or (not force and os.clock() < puzzleRetryAt) then return false end
 
         puzzleBusy = true
         local ok, solved = pcall(function()
@@ -3718,6 +3719,14 @@ end)()
             end
         end)
         tab:CreateButton("Refresh objectives", refreshObjectiveState)
+        tab:CreateButton("Solve map puzzle now", function()
+            releaseAutomation()
+            local solved = solveSpecialPuzzle(true)
+            if objectivePuzzleLabel and getPuzzleStatus then
+                objectivePuzzleLabel:Set("Puzzle: " .. tostring(getPuzzleStatus()))
+            end
+            if solved then refreshObjectiveState() end
+        end)
         tab:CreateButton("Teleport to required item", function()
             local _, objective = refreshObjectiveState()
             if not objective then return end
