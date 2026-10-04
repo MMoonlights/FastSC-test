@@ -279,6 +279,8 @@ return function(ctx)
         RedGear = "Red Gear",
         GreenGear = "Green Gear",
         WhiteGear = "White Gear",
+        RedEgg = "Red Egg",
+        GreenEgg = "Green Egg",
         KeyCode = "Key Code",
         WaterGun = "Water Gun",
         FireExtinguisher = "Fire Extinguisher",
@@ -586,6 +588,33 @@ return function(ctx)
         itemUiDirty = true
     end
 
+    local function itemStagePresent(id)
+        local bucket = itemsById[id]
+        if bucket then
+            for item in pairs(bucket) do
+                if isWorldItem(item) then return true end
+            end
+        end
+
+        for _, player in ipairs(Players:GetPlayers()) do
+            local backpack = player:FindFirstChild("Backpack")
+            for _, container in ipairs({player.Character, backpack}) do
+                if container then
+                    for _, object in ipairs(container:GetChildren()) do
+                        if object:IsA("Tool") then
+                            local resolved = itemId(object)
+                            if resolved == id or aliases[token(object.Name)] == id then
+                                return true
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        return false
+    end
+
     local function ancestorRequirementLocks(item)
         local current = item.Parent
         for _ = 1, 5 do
@@ -612,7 +641,19 @@ return function(ctx)
         local map = currentMapName()
 
         if map == "House" and id == "WhiteKey" then
-            if requirementExists("RedGear") or requirementExists("GreenGear") then
+            if requirementExists("RedGear")
+                or requirementExists("GreenGear")
+                or itemStagePresent("RedGear")
+                or itemStagePresent("GreenGear") then
+                return false
+            end
+        end
+
+        if map == "Gallery" and id == "WhiteKey" then
+            if requirementExists("RedEgg")
+                or requirementExists("GreenEgg")
+                or itemStagePresent("RedEgg")
+                or itemStagePresent("GreenEgg") then
                 return false
             end
         end
@@ -1635,6 +1676,8 @@ return function(ctx)
         RedGear = 21,
         GreenGear = 21,
         WhiteGear = 21,
+        RedEgg = 21,
+        GreenEgg = 21,
         RemoteControl = 22,
         KeyCode = 30,
     }
