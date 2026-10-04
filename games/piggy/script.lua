@@ -2067,6 +2067,12 @@ return function(ctx)
         return best
     end
 
+    local function profilePriority(id)
+        local profile = mapProfiles[currentMapName()]
+        local priority = profile and profile.Priority and profile.Priority[id]
+        return priority or blockerPriority[id] or 100
+    end
+
     local function chooseObjective(objectives)
         local root = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
         local best
@@ -2077,17 +2083,17 @@ return function(ctx)
             local worldItem, worldDistance = findItemById(objective.Id)
             local score
             if blocker then
-                score = 1000000 + (blockerPriority[blocker.Id] or 100)
+                score = 1000000 + profilePriority(blocker.Id)
             elseif owned then
                 score = blockerPriority[objective.Id] or 100
             elseif worldItem then
-                score = 200 + (blockerPriority[objective.Id] or 100) + (worldDistance or 0) * 0.01
+                score = 200 + profilePriority(objective.Id) + (worldDistance or 0) * 0.01
             else
                 score = 100000
                 if root and objective.Part then
                     score = score + (objective.Part.Position - root.Position).Magnitude
                 end
-                score = score + (blockerPriority[objective.Id] or 100)
+                score = score + profilePriority(objective.Id)
             end
             local cooldown = objective.Requirement and objectiveCooldowns[objective.Requirement]
             if cooldown and cooldown > os.clock() then score = score + 50000 end
