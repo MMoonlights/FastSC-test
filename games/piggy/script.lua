@@ -41,6 +41,7 @@ return function(ctx)
     local objectiveCurrentLabel
     local objectiveNeededLabel
     local objectiveStatusLabel
+    local objectivePuzzleLabel
     local currentObjective
     local findOwnedById
     local lastPickupStatus = "idle"
@@ -1703,8 +1704,9 @@ return function(ctx)
         return table.concat(chunks, " ")
     end
 
-    local solveCodePanel, solveSpecialPuzzle = (function()
+    local solveCodePanel, solveSpecialPuzzle, getPuzzleStatus = (function()
     local puzzleBusy = false
+    local puzzleStatus = "idle"
     local puzzleRetryAt = 0
     local solvedPuzzles = {}
 
@@ -2387,6 +2389,7 @@ return function(ctx)
 
     local function solveShipColorCode()
         local pad = findCanonicalRoot("ColorCode")
+        puzzleStatus = "ColorCode: discovering"
         local padControls = pad and controlsUnder(pad) or selectPuzzleControls("ColorCode", 4, {"color", "code", "button"}, false)
         padControls = uniqueControls(padControls)
         if #padControls < 4 then return false end
@@ -2402,6 +2405,7 @@ return function(ctx)
         if not (byColor.Red and byColor.Yellow and byColor.Blue and byColor.Green) then return false end
 
         local clues = coloredGroupOfFour(pad)
+        puzzleStatus = "ColorCode: buttons=" .. tostring(#padControls) .. " clues=" .. tostring(clues and #clues or 0)
         if not clues or #clues ~= 4 then return false end
         local parts = {}
         local colorByPart = {}
@@ -2463,6 +2467,7 @@ return function(ctx)
     local function solveCampLightCircle()
         local controls, root = selectPuzzleControls("LightCircle", 8, {"light", "circle", "roulette", "button"}, false)
         controls = compactSubset(controls, 8)
+        puzzleStatus = "LightCircle: controls=" .. tostring(#controls) .. " root=" .. tostring(root and root.Name or "none")
         if #controls ~= 8 then return false end
         local entries = circularOrder(controls)
         if #entries ~= 8 then return false end
@@ -2617,6 +2622,7 @@ return function(ctx)
     end
 
     local function solveLabLevers()
+        puzzleStatus = "ReactorLevers: discovering grid"
         local gridRoot, grid = findLabGrid()
         if #grid ~= 9 then
             activateLabPower()
@@ -2636,7 +2642,10 @@ return function(ctx)
                 if colorIsGreen(part) then green[#green + 1] = index end
             end
         end
-        if #green ~= 3 then return false end
+        if #green ~= 3 then
+            puzzleStatus = "ReactorLevers: grid=" .. tostring(#grid) .. " green=" .. tostring(#green)
+            return false
+        end
 
         local controls, leverRoot = selectPuzzleControls(nil, 9, {"lever", "switch"}, false)
         controls = uniqueControls(controls)
@@ -2649,6 +2658,7 @@ return function(ctx)
         elseif #filtered > 9 then
             filtered = compactSubset(filtered, 9)
         end
+        puzzleStatus = "ReactorLevers: grid=9 green=3 levers=" .. tostring(#filtered)
         if #filtered ~= 9 then return false end
         local ordered = gridOrder(filtered, controlPosition)
         if #ordered ~= 9 then return false end
@@ -2674,9 +2684,11 @@ return function(ctx)
 
     local function solveDigitCode()
         local root = findCanonicalRoot("DigitCode")
+        puzzleStatus = "DigitCode: discovering"
         if root and solveCodePanel(root) then return true end
         local controls, groupRoot = selectPuzzleControls("DigitCode", 3, {"digit", "number", "code", "keypad"}, true)
         controls = collapseSlotControls(controls, 3)
+        puzzleStatus = "DigitCode: controls=" .. tostring(#controls) .. " root=" .. tostring((root or groupRoot) and (root or groupRoot).Name or "none")
         if #controls ~= 3 then return false end
         return cyclePuzzle({"digit", "number", "code", "keypad"}, 3, 10, 1000, "DigitCode")
     end
@@ -2684,6 +2696,7 @@ return function(ctx)
     local function solveRomanCode()
         local controls, root = selectPuzzleControls("RomanCode", 3, {"roman", "numeral", "code"}, true)
         controls = collapseSlotControls(controls, 3)
+        puzzleStatus = "RomanCode: controls=" .. tostring(#controls) .. " root=" .. tostring(root and root.Name or "none")
         if #controls ~= 3 then return false end
         local before = progressFingerprint()
         local counters = {0, 0, 0}
@@ -2705,6 +2718,7 @@ return function(ctx)
     local function solveShapeWheel()
         local controls, root = selectPuzzleControls("ShapeWheel", 3, {"shape", "wheel", "symbol"}, true)
         controls = collapseSlotControls(controls, 3)
+        puzzleStatus = "ShapeWheel: controls=" .. tostring(#controls) .. " root=" .. tostring(root and root.Name or "none")
         if #controls ~= 3 then return false end
         local before = progressFingerprint()
         local counters = {0, 0, 0}
@@ -2743,15 +2757,23 @@ return function(ctx)
         puzzleBusy = false
 
         if ok and solved then
+            puzzleStatus = puzzle .. ": solved"
             solvedPuzzles[mapName .. ":" .. puzzle] = true
             puzzleRetryAt = os.clock() + 0.2
             return true
+        end
+        if not ok then
+            puzzleStatus = puzzle .. ": error"
+        elseif puzzleStatus == "idle" then
+            puzzleStatus = puzzle .. ": not ready"
         end
         puzzleRetryAt = os.clock() + 0.8
         return false
     end
 
-    return solveCodePanel, solveSpecialPuzzle
+    return solveCodePanel, solveSpecialPuzzle, function()
+        return puzzleStatus
+    end
 end)()
     local function isFreeProgressInteraction(interactive)
         if not interactive or not interactive.Parent then return false end
@@ -3584,6 +3606,7 @@ end)()
         objectiveCurrentLabel = tab:CreateLabel("Current objective: scanning...")
         objectiveNeededLabel = tab:CreateLabel("Items needed: scanning...")
         objectiveStatusLabel = tab:CreateLabel("Status: scanning map...")
+        objectivePuzzleLabel = tab:CreateLabel("Puzzle: " .. tostring(getPuzzleStatus and getPuzzleStatus() or "idle"))
         tab:CreateToggle("Objective ESP", false, function(value)
             objectiveEsp = value
             if not value then
@@ -3738,7 +3761,12 @@ end)()
         end
     end)
 
-    scope:Loop("objectiveHelper", 0.1, refreshObjectiveState)
+    scope:Loop("objectiveHelper", 0.1, function()
+        refreshObjectiveState()
+        if objectivePuzzleLabel and getPuzzleStatus then
+            objectivePuzzleLabel:Set("Puzzle: " .. tostring(getPuzzleStatus()))
+        end
+    end)
     scope:Loop("itemUiRefresh", 0.1, refreshItemDropdown)
 
     scope:Loop("playerState", 0.05, function()
