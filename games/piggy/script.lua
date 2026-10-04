@@ -1612,23 +1612,87 @@ return function(ctx)
         return result
     end
 
+    local blockerPriority = {
+        Crowbar = 1,
+        Hammer = 2,
+        Scissors = 3,
+        Screwdriver = 4,
+        Wrench = 5,
+        Mop = 6,
+        Blowtorch = 7,
+        FireExtinguisher = 8,
+        Axe = 9,
+        Shovel = 10,
+        Dynamite = 11,
+        TNT = 12,
+        Battery = 13,
+        Batteries = 13,
+        RedWire = 14,
+        GreenWire = 14,
+        BlueWire = 14,
+        YellowWire = 14,
+        Plank = 20,
+        RedGear = 21,
+        GreenGear = 21,
+        WhiteGear = 21,
+        RemoteControl = 22,
+        KeyCode = 30,
+    }
+
+    local function isLockItem(id)
+        local value = tostring(id or "")
+        return value:find("Key", 1, true) ~= nil
+            or value:find("Keycard", 1, true) ~= nil
+            or id == "ElevatorKey"
+    end
+
+    local function objectiveDistance(a, b)
+        if not a or not b or not a.Part or not b.Part then return math.huge end
+        return (a.Part.Position - b.Part.Position).Magnitude
+    end
+
+    local function blockingObjectiveFor(objective, objectives)
+        if not isLockItem(objective.Id) then return nil end
+
+        local best
+        local bestPriority = math.huge
+        for _, candidate in ipairs(objectives) do
+            if candidate ~= objective then
+                local priority = blockerPriority[candidate.Id]
+                if priority and objectiveDistance(objective, candidate) <= 18 then
+                    if objectiveStillActive == nil or objectiveStillActive(candidate) then
+                        if priority < bestPriority then
+                            best = candidate
+                            bestPriority = priority
+                        end
+                    end
+                end
+            end
+        end
+        return best
+    end
+
     local function chooseObjective(objectives)
         local root = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
         local best
         local bestScore = math.huge
         for _, objective in ipairs(objectives) do
+            local blocker = blockingObjectiveFor(objective, objectives)
             local owned = findOwnedById(objective.Id)
             local worldItem, worldDistance = findItemById(objective.Id)
             local score
-            if owned then
-                score = 0
+            if blocker then
+                score = 1000000 + (blockerPriority[blocker.Id] or 100)
+            elseif owned then
+                score = blockerPriority[objective.Id] or 100
             elseif worldItem then
-                score = 100 + (worldDistance or 0)
+                score = 200 + (blockerPriority[objective.Id] or 100) + (worldDistance or 0) * 0.01
             else
                 score = 100000
                 if root and objective.Part then
                     score = score + (objective.Part.Position - root.Position).Magnitude
                 end
+                score = score + (blockerPriority[objective.Id] or 100)
             end
             local cooldown = objective.Requirement and objectiveCooldowns[objective.Requirement]
             if cooldown and cooldown > os.clock() then score = score + 50000 end
@@ -1791,7 +1855,7 @@ return function(ctx)
         task.wait(0.04)
         local completed = not objectiveStillActive(objective)
         endAutomationMove()
-        return ok and (completed or touched)
+        return ok and completed
     end
 
     local function isEscapeRelatedPart(part)
@@ -1909,8 +1973,12 @@ return function(ctx)
 
             local required = equipRequired(objective.Id)
             if required then
-                if activateObjective(objective) and objective.Requirement then
-                    objectiveCooldowns[objective.Requirement] = os.clock() + 0.45
+                local completed = activateObjective(objective)
+                if objective.Requirement then
+                    objectiveCooldowns[objective.Requirement] = os.clock() + (completed and 0.08 or 0.3)
+                end
+                if not completed then
+                    runFreeInteractionStep()
                 end
             else
                 runFreeInteractionStep()
