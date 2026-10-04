@@ -513,7 +513,6 @@ return function(ctx)
         SafePlace = {
             Depends = {
                 Blowtorch = {"FireExtinguisher", "Screwdriver", "Ladder"},
-                WhiteKey = {"Screwdriver", "Ladder", "RedKey"},
             },
         },
         Sewers = {
@@ -527,8 +526,8 @@ return function(ctx)
             },
         },
         Factory = {
-            Depends = {
-                WoodenSword = {"Axe", "FireExtinguisher", "Shovel", "Ladder", "Screwdriver"},
+            Counters = {
+                WoodenSword = 3,
             },
         },
         Port = {
@@ -553,7 +552,7 @@ return function(ctx)
         },
         Camp = {
             Depends = {
-                ElevatorKey = {"Ladder", "Shovel", "Rope", "TNT"},
+                ElevatorKey = {"TNT"},
             },
         },
         Lab = {
