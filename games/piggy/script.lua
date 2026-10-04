@@ -391,7 +391,7 @@ return function(ctx)
             },
             Priority = {
                 GreenKey = 10, RedKey = 20, BlueKey = 30, YellowKey = 35, OrangeKey = 40,
-                RedGear = 45, GreenGear = 45, Hammer = 55, Wrench = 56, KeyCode = 57, WhiteKey = 100,
+                RedGear = 45, GreenGear = 45, Plank = 50, Hammer = 55, Wrench = 56, KeyCode = 57, WhiteKey = 100,
             },
         },
         Station = {
@@ -458,7 +458,7 @@ return function(ctx)
             },
             Priority = {
                 GreenKeycard = 10, BlueKeycard = 15, RedKeycard = 20, OrangeKeycard = 25,
-                Hammer = 30, Plank = 35, EmptyVial = 40, GreenVial = 50, PurpleVial = 51,
+                Hammer = 30, Plank = 35, Wrench = 36, EmptyVial = 40, GreenVial = 50, PurpleVial = 51,
                 YellowKey = 60, WhiteKey = 100,
             },
         },
@@ -490,7 +490,7 @@ return function(ctx)
             },
             Priority = {
                 BlueKey = 10, GreenKey = 15, RedKey = 20, YellowKey = 25, OrangeKey = 30,
-                Mallet = 35, Hammer = 40, Wrench = 45, WaterGun = 50, KeyCode = 55, WhiteKey = 100,
+                Mallet = 35, Plank = 38, Hammer = 40, Wrench = 45, WaterGun = 50, KeyCode = 55, WhiteKey = 100,
             },
         },
         City = {
@@ -503,7 +503,7 @@ return function(ctx)
             },
             Priority = {
                 GreenKeycard = 10, RedKeycard = 15, OrangeKeycard = 20, BlueKeycard = 25,
-                Plank = 35, FireExtinguisher = 40, Wrench = 45, Dynamite = 50, KeyCode = 100,
+                Plank = 35, Wrench = 40, Dynamite = 45, FireExtinguisher = 50, KeyCode = 100,
             },
         },
         Mall = {
@@ -518,7 +518,8 @@ return function(ctx)
             },
             Priority = {
                 BlueKey = 10, GreenKey = 15, OrangeKey = 20, RedKey = 25,
-                Wrench = 35, Crowbar = 40, Coin = 45, WhiteKey = 100,
+                GreenKeycard = 30, Wrench = 35, Crowbar = 40, Plank = 42,
+                Mirror = 44, Coin = 45, WhiteKey = 100,
             },
         },
         Outpost = {
@@ -588,7 +589,7 @@ return function(ctx)
             },
             Priority = {
                 GreenKey = 10, OrangeKey = 15, RedKey = 20, BlueKey = 25,
-                RemoteControl = 30, YellowKey = 40, Ladder = 45, Carrot = 50,
+                Scissors = 28, RemoteControl = 30, YellowKey = 40, Ladder = 45, Carrot = 50,
                 PurpleKey = 55, Battery = 100,
             },
         },
@@ -612,9 +613,9 @@ return function(ctx)
                     "FireExtinguisher", "Hammer", "Blowtorch"},
             },
             Priority = {
-                Screwdriver = 10, Ladder = 15, RedKey = 20, YellowKey = 25,
-                FireExtinguisher = 30, Hammer = 35, PurpleKey = 40, ElevatorKey = 45,
-                Blowtorch = 50, WhiteKey = 100,
+                Screwdriver = 10, Ladder = 15, OrangeKey = 18, GreenKey = 20, RedKey = 22,
+                BlueKey = 24, YellowKey = 26, FireExtinguisher = 30, Hammer = 35,
+                PurpleKey = 40, ElevatorKey = 45, Blowtorch = 50, WhiteKey = 100,
             },
         },
         Sewers = {
@@ -631,7 +632,7 @@ return function(ctx)
             },
             Priority = {
                 GreenKey = 10, OrangeKey = 15, Plank = 20, Screwdriver = 25, WhiteGear = 30,
-                BlueKey = 40, YellowKey = 45, Mop = 50, RedKey = 55, WhiteKey = 100,
+                BlueKey = 40, YellowKey = 45, PurpleKey = 48, Mop = 50, RedKey = 55, WhiteKey = 100,
             },
         },
         Factory = {
@@ -677,7 +678,8 @@ return function(ctx)
             },
             Priority = {
                 BlueKey = 10, GreenKey = 15, OrangeKey = 20, RedKey = 25,
-                Hammer = 30, Plank = 35, Candle = 40, TNT = 42, YellowKey = 45, WhiteKey = 100,
+                Hammer = 30, Plank = 35, Candle = 40, TNT = 42, YellowKey = 45,
+                PurpleKey = 50, WhiteKey = 100,
             },
         },
         Temple = {
@@ -690,7 +692,8 @@ return function(ctx)
             },
             Priority = {
                 BlueKey = 10, GreenKey = 15, OrangeKey = 20, RedKey = 25,
-                Shovel = 30, YellowKey = 35, Hammer = 40, Plank = 45, Candle = 50, WhiteKey = 100,
+                Shovel = 30, YellowKey = 35, Hammer = 40, Plank = 45, Candle = 50,
+                Gas = 55, PurpleKey = 60, WhiteKey = 100,
             },
         },
         Camp = {
