@@ -2327,6 +2327,18 @@ return function(ctx)
         return result
     end
 
+    local function partBoundsScore(parts)
+        if #parts == 0 then return math.huge end
+        local minV = Vector3.new(math.huge, math.huge, math.huge)
+        local maxV = Vector3.new(-math.huge, -math.huge, -math.huge)
+        for _, part in ipairs(parts) do
+            local p = part.Position
+            minV = Vector3.new(math.min(minV.X, p.X), math.min(minV.Y, p.Y), math.min(minV.Z, p.Z))
+            maxV = Vector3.new(math.max(maxV.X, p.X), math.max(maxV.Y, p.Y), math.max(maxV.Z, p.Z))
+        end
+        return (maxV - minV).Magnitude
+    end
+
     local function coloredGroupOfFour(exclude)
         local candidates = coloredPartCandidates(exclude)
         local groups = {}
@@ -2354,14 +2366,9 @@ return function(ctx)
             if #unique >= 4 and #unique <= 8 then
                 local parts = {}
                 for _, entry in ipairs(unique) do parts[#parts + 1] = entry.Part end
-                local score = math.abs(#unique - 4) * 1000 + boundsScore((function()
-                    local fake = {}
-                    for _, part in ipairs(parts) do
-                        local control = part:FindFirstChildWhichIsA("ClickDetector") or part:FindFirstChildWhichIsA("ProximityPrompt")
-                        if control then fake[#fake + 1] = control end
-                    end
-                    return fake
-                end)()) - keywordScore(root, {"control", "monitor", "screen", "display"}) * 200
+                local score = math.abs(#unique - 4) * 1000
+                    + partBoundsScore(parts)
+                    - keywordScore(root, {"control", "monitor", "screen", "display"}) * 200
                 if score < bestScore then
                     best = unique
                     bestScore = score
@@ -2574,16 +2581,18 @@ return function(ctx)
             end
         end
         local used = {}
+        local usedCount = 0
         for _, control in ipairs(candidates) do
             local host = control.Parent
             if host and not used[host] then
                 used[host] = true
+                usedCount += 1
                 clickControl(control)
                 task.wait(0.15)
-                if table.getn(used) >= 2 then break end
+                if usedCount >= 2 then break end
             end
         end
-        if next(used) then
+        if usedCount > 0 then
             task.wait(4.2)
             return true
         end
