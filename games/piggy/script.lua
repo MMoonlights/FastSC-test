@@ -2581,7 +2581,12 @@ return function(ctx)
         if objectiveNeededLabel then objectiveNeededLabel:Set(remainingText(objectives)) end
         if objectiveStatusLabel then
             if not currentObjective then
-                objectiveStatusLabel:Set("Status: objectives clear, checking mechanics / escape")
+                local profile = mapProfiles[currentMapName()]
+                if profile and profile.Puzzle then
+                    objectiveStatusLabel:Set("Status: item objectives clear, puzzle: " .. profile.Puzzle)
+                else
+                    objectiveStatusLabel:Set("Status: objectives clear, checking mechanics / escape")
+                end
             elseif findOwnedById(currentObjective.Id) then
                 objectiveStatusLabel:Set("Status: item owned, apply it to " .. currentObjective.TargetName)
             elseif findItemById(currentObjective.Id) then
@@ -2793,7 +2798,10 @@ return function(ctx)
             local objectives, objective = refreshObjectiveState()
 
             if #objectives == 0 then
-                if runFreeInteractionStep() then
+                if solveSpecialPuzzle() then
+                    task.wait(0.03)
+                    refreshObjectiveState()
+                elseif runFreeInteractionStep() then
                     task.wait(0.03)
                     refreshObjectiveState()
                 else
@@ -2814,7 +2822,9 @@ return function(ctx)
                     runFreeInteractionStep()
                 end
             else
-                runFreeInteractionStep()
+                if not solveSpecialPuzzle() then
+                    runFreeInteractionStep()
+                end
             end
 
             refreshObjectiveState()
