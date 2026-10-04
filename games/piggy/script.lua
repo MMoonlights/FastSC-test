@@ -1946,6 +1946,38 @@ return function(ctx)
         return score
     end
 
+    local function puzzleAnchorPosition()
+        if currentObjective and currentObjective.Part and currentObjective.Part.Parent then
+            return currentObjective.Part.Position
+        end
+        local root = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+        local best
+        local bestDistance = math.huge
+        for part in pairs(escapeTargets) do
+            if part.Parent then
+                local distance = root and (part.Position - root.Position).Magnitude or 0
+                if distance < bestDistance then
+                    best = part.Position
+                    bestDistance = distance
+                end
+            end
+        end
+        return best
+    end
+
+    local function groupCenter(controls)
+        local center = Vector3.zero
+        local count = 0
+        for _, control in ipairs(controls) do
+            local position = controlPosition(control)
+            if position then
+                center += position
+                count += 1
+            end
+        end
+        return count > 0 and center / count or nil
+    end
+
     local function groupedControls(expected, keywords, allowDouble)
         local _, events = mapAndEvents()
         if not events then return {}, nil end
@@ -1979,6 +2011,11 @@ return function(ctx)
             if count >= expected and count <= expected * 3 then
                 local words = keywordScore(root, keywords)
                 local score = countDelta * 1000 + boundsScore(group) - words * 250
+                local anchor = puzzleAnchorPosition()
+                local center = anchor and groupCenter(group)
+                if anchor and center then
+                    score += math.min((center - anchor).Magnitude, 250) * 2
+                end
                 if score < bestScore then
                     bestControls = group
                     bestRoot = root
@@ -2753,9 +2790,10 @@ return function(ctx)
         if root and solveCodePanel(root) then return true end
         local controls, groupRoot = selectPuzzleControls("DigitCode", 3, {"digit", "number", "code", "keypad"}, true)
         controls = collapseSlotControls(controls, 3)
-        puzzleStatus = "DigitCode: controls=" .. tostring(#controls) .. " root=" .. tostring((root or groupRoot) and (root or groupRoot).Name or "none")
+        local puzzleRoot = root or groupRoot
+        puzzleStatus = "DigitCode: controls=" .. tostring(#controls) .. " root=" .. tostring(puzzleRoot and puzzleRoot.Name or "none")
         if #controls ~= 3 then return false end
-        return cyclePuzzle({"digit", "number", "code", "keypad"}, 3, 10, 1000, "DigitCode")
+        return cyclePuzzleControls(controls, 10, 1000, puzzleRoot)
     end
 
     local function solveRomanCode()
