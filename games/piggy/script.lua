@@ -610,7 +610,8 @@ return function(ctx)
             },
             Priority = {
                 Screwdriver = 10, Ladder = 15, RedKey = 20, YellowKey = 25,
-                FireExtinguisher = 30, Hammer = 35, PurpleKey = 40, Blowtorch = 50, WhiteKey = 100,
+                FireExtinguisher = 30, Hammer = 35, PurpleKey = 40, ElevatorKey = 45,
+                Blowtorch = 50, WhiteKey = 100,
             },
         },
         Sewers = {
@@ -673,7 +674,7 @@ return function(ctx)
             },
             Priority = {
                 BlueKey = 10, GreenKey = 15, OrangeKey = 20, RedKey = 25,
-                Hammer = 30, Plank = 35, Candle = 40, YellowKey = 45, WhiteKey = 100,
+                Hammer = 30, Plank = 35, Candle = 40, TNT = 42, YellowKey = 45, WhiteKey = 100,
             },
         },
         Temple = {
@@ -691,7 +692,6 @@ return function(ctx)
         },
         Camp = {
             Puzzle = "LightCircle",
-            PuzzleBefore = {"ElevatorKey"},
             Depends = {
                 ElevatorKey = {"RedKey"},
             },
@@ -709,7 +709,8 @@ return function(ctx)
             Priority = {
                 GreenKey = 10, PurpleKey = 15, YellowKey = 20, Wrench = 25,
                 BlueKey = 30, RedKeycard = 35, OrangeKeycard = 40, BlueKeycard = 45,
-                Dynamite = 60, Screwdriver = 65, Hammer = 70, Mop = 75, WoodenSword = 80,
+                Dynamite = 60, Screwdriver = 65, Hammer = 70, WaterGun = 75,
+                Pipe = 76, WoodenSword = 77, Mop = 80,
             },
         },
     }
