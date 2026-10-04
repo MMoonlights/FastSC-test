@@ -560,6 +560,7 @@ return function(ctx)
             },
         },
         Alleys = {
+            Puzzle = "DigitCode",
             Depends = {
                 Screwdriver = {"YellowKey"},
                 WhiteKey = {"OrangeKey", "Scissors", "Mop", "Screwdriver", "PurpleKey", "KeyCode"},
@@ -651,6 +652,7 @@ return function(ctx)
             },
         },
         Ship = {
+            Puzzle = "ColorCode",
             Depends = {
                 WhiteKey = {"Screwdriver", "Wrench"},
             },
@@ -660,6 +662,7 @@ return function(ctx)
             },
         },
         Docks = {
+            Puzzle = "RomanCode",
             Depends = {
                 Plank = {"Hammer"},
                 WhiteKey = {"GreenKey", "Hammer", "Plank", "Candle"},
@@ -670,6 +673,7 @@ return function(ctx)
             },
         },
         Temple = {
+            Puzzle = "ShapeWheel",
             Depends = {
                 Hammer = {"RedKey"},
                 Plank = {"Hammer"},
@@ -681,6 +685,7 @@ return function(ctx)
             },
         },
         Camp = {
+            Puzzle = "LightCircle",
             Depends = {
                 ElevatorKey = {"RedKey"},
             },
@@ -691,6 +696,7 @@ return function(ctx)
             },
         },
         Lab = {
+            Puzzle = "ReactorLevers",
             Depends = {
                 BlueKeycard = {"Wrench"},
             },
