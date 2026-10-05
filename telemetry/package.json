@@ -1,5 +1,5 @@
 {
-  "name": "fastsc-telemetry-api",
+  "name": "fastsc-api",
   "private": true,
   "scripts": {
     "dev": "next dev",
