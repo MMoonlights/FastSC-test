@@ -2562,47 +2562,106 @@ return function(ctx)
         return best
     end
 
+    local function controlColorName(control)
+        if not control or not control.Parent then return nil end
+        local candidates = {}
+        if control.Parent:IsA("BasePart") then candidates[#candidates + 1] = control.Parent end
+        for _, descendant in ipairs(control.Parent:GetDescendants()) do
+            if descendant:IsA("BasePart") then candidates[#candidates + 1] = descendant end
+        end
+        local best
+        local bestDistance = math.huge
+        for _, part in ipairs(candidates) do
+            local name, distance = nearestPuzzleColor(part.Color)
+            if distance < bestDistance then
+                best = name
+                bestDistance = distance
+            end
+        end
+        if bestDistance < 0.45 then return best end
+    end
+
     local function solveShipColorCode()
         local pad = findCanonicalRoot("ColorCode")
         puzzleStatus = "ColorCode: discovering"
-        local padControls = pad and controlsUnder(pad) or selectPuzzleControls("ColorCode", 4, {"color", "code", "button"}, false)
-        padControls = uniqueControls(padControls)
-        if #padControls < 4 then return false end
+        local padControls
+        local groupRoot
+        if pad then
+            padControls = controlsUnder(pad)
+            groupRoot = pad
+        else
+            padControls, groupRoot = selectPuzzleControls("ColorCode", 4, {"color", "code", "button"}, false)
+            pad = groupRoot
+        end
+        padControls = uniqueControls(padControls or {})
 
         local byColor = {}
         for _, control in ipairs(padControls) do
-            local part = control.Parent
-            if part and part:IsA("BasePart") then
-                local name, distance = nearestPuzzleColor(part.Color)
-                if distance < 0.45 and not byColor[name] then byColor[name] = control end
+            local name = controlColorName(control)
+            if name and not byColor[name] then byColor[name] = control end
+        end
+
+        local colorNames = {"Red", "Yellow", "Blue", "Green"}
+        for _, name in ipairs(colorNames) do
+            if not byColor[name] then
+                puzzleStatus = "ColorCode: missing " .. name .. " button"
+                return false
             end
         end
-        if not (byColor.Red and byColor.Yellow and byColor.Blue and byColor.Green) then return false end
+
+        local sequences = {}
+        local seenSequences = {}
+        local function addSequence(sequence)
+            if #sequence ~= 4 then return end
+            local key = table.concat(sequence, ",")
+            if not seenSequences[key] then
+                seenSequences[key] = true
+                sequences[#sequences + 1] = sequence
+            end
+        end
 
         local clues = coloredGroupOfFour(pad)
-        puzzleStatus = "ColorCode: buttons=" .. tostring(#padControls) .. " clues=" .. tostring(clues and #clues or 0)
-        if not clues or #clues ~= 4 then return false end
-        local parts = {}
-        local colorByPart = {}
-        for _, entry in ipairs(clues) do
-            parts[#parts + 1] = entry.Part
-            colorByPart[entry.Part] = entry.Color
+        if clues and #clues == 4 then
+            local parts = {}
+            local colorByPart = {}
+            for _, entry in ipairs(clues) do
+                parts[#parts + 1] = entry.Part
+                colorByPart[entry.Part] = entry.Color
+            end
+            linearOrder(parts, function(part) return part.Position end)
+            local forward = {}
+            for _, part in ipairs(parts) do forward[#forward + 1] = colorByPart[part] end
+            local reverse = {}
+            for index = #forward, 1, -1 do reverse[#reverse + 1] = forward[index] end
+            addSequence(forward)
+            addSequence(reverse)
         end
-        linearOrder(parts, function(part) return part.Position end)
 
-        local forward = {}
-        for _, part in ipairs(parts) do forward[#forward + 1] = colorByPart[part] end
-        local reverse = {}
-        for index = #forward, 1, -1 do reverse[#reverse + 1] = forward[index] end
+        local function permute(values, index)
+            if index > #values then
+                local copy = {}
+                for i, value in ipairs(values) do copy[i] = value end
+                addSequence(copy)
+                return
+            end
+            for i = index, #values do
+                values[index], values[i] = values[i], values[index]
+                permute(values, index + 1)
+                values[index], values[i] = values[i], values[index]
+            end
+        end
+        permute({"Red", "Yellow", "Blue", "Green"}, 1)
 
+        puzzleStatus = "ColorCode: buttons=4 attempts=" .. tostring(#sequences)
         local before = progressFingerprint()
-        for _, sequence in ipairs({forward, reverse}) do
+        for attempt, sequence in ipairs(sequences) do
+            puzzleStatus = "ColorCode: attempt " .. tostring(attempt) .. "/" .. tostring(#sequences)
             for _, colorName in ipairs(sequence) do
                 clickControl(byColor[colorName])
-                task.wait(0.035)
+                task.wait(0.025)
             end
-            if waitForSolved(before, pad, 0.55) then return true end
-            task.wait(0.15)
+            if waitForSolved(before, pad, 0.28) then return true end
+            task.wait(0.04)
         end
         return false
     end
@@ -2619,17 +2678,17 @@ return function(ctx)
     end
 
     local function campSolved(root, entries)
-        local lit = 0
-        for _, entry in ipairs(entries) do
-            if partLit(entry.Control.Parent) then lit += 1 end
-        end
-        if lit == 0 then return true end
+        if localSolved(root) then return true end
         if root then
             for _, part in ipairs(root:GetDescendants()) do
                 if part:IsA("BasePart") then
                     local n = string.lower(part.Name)
-                    if n:find("center", 1, true) or n:find("middle", 1, true) or n:find("indicator", 1, true) then
-                        if part.Color.G > part.Color.R * 1.3 and part.Color.G > part.Color.B * 1.3 then
+                    if n:find("center", 1, true)
+                        or n:find("middle", 1, true)
+                        or n:find("indicator", 1, true) then
+                        if part.Color.G > 0.45
+                            and part.Color.G > part.Color.R * 1.3
+                            and part.Color.G > part.Color.B * 1.2 then
                             return true
                         end
                     end
@@ -2860,23 +2919,44 @@ return function(ctx)
     local function solveDigitCode()
         local root = findCanonicalRoot("DigitCode")
         puzzleStatus = "DigitCode: discovering"
+
         if root and solveCodePanel(root) then return true end
-        local controls, groupRoot = selectPuzzleControls("DigitCode", 3, {"digit", "number", "code", "keypad"}, true)
-        controls = collapseSlotControls(controls, 3)
+
+        local rawControls
+        local groupRoot
+        if root then
+            rawControls = controlsUnder(root)
+            groupRoot = root
+        else
+            rawControls, groupRoot = selectPuzzleControls("DigitCode", 6, {"digit", "number", "code", "keypad", "plus", "minus"}, false)
+            if #rawControls < 6 then
+                rawControls, groupRoot = selectPuzzleControls("DigitCode", 3, {"digit", "number", "code", "keypad"}, true)
+            end
+        end
+
+        local controls = collapseSlotControls(rawControls or {}, 3)
         local puzzleRoot = root or groupRoot
-        puzzleStatus = "DigitCode: controls=" .. tostring(#controls) .. " root=" .. tostring(puzzleRoot and puzzleRoot.Name or "none")
+        puzzleStatus = "DigitCode: raw=" .. tostring(#(rawControls or {}))
+            .. " slots=" .. tostring(#controls)
+            .. " root=" .. tostring(puzzleRoot and puzzleRoot.Name or "none")
+
         if #controls ~= 3 then return false end
         return cyclePuzzleControls(controls, 10, 1000, puzzleRoot)
     end
 
     local function solveRomanCode()
-        local controls, root = selectPuzzleControls("RomanCode", 3, {"roman", "numeral", "code"}, true)
-        controls = collapseSlotControls(controls, 3)
-        puzzleStatus = "RomanCode: controls=" .. tostring(#controls) .. " root=" .. tostring(root and root.Name or "none")
+        local raw, root = selectPuzzleControls("RomanCode", 6, {"roman", "numeral", "code", "pillar"}, false)
+        if #raw < 3 then
+            raw, root = selectPuzzleControls("RomanCode", 3, {"roman", "numeral", "code", "pillar"}, true)
+        end
+        local controls = collapseSlotControls(raw, 3)
+        puzzleStatus = "RomanCode: raw=" .. tostring(#raw)
+            .. " slots=" .. tostring(#controls)
+            .. " root=" .. tostring(root and root.Name or "none")
         if #controls ~= 3 then return false end
         local before = progressFingerprint()
         local counters = {0, 0, 0}
-        for _ = 1, 64 do
+        for attempt = 1, 64 do
             local carry = true
             for index = 1, 3 do
                 if carry then
@@ -2885,20 +2965,26 @@ return function(ctx)
                     if counters[index] >= 4 then counters[index] = 0 else carry = false end
                 end
             end
-            task.wait(0.008)
+            task.wait(0.012)
+            puzzleStatus = "RomanCode: " .. tostring(attempt) .. "/64"
             if localSolved(root) or progressFingerprint() ~= before then return true end
         end
         return false
     end
 
     local function solveShapeWheel()
-        local controls, root = selectPuzzleControls("ShapeWheel", 3, {"shape", "wheel", "symbol"}, true)
-        controls = collapseSlotControls(controls, 3)
-        puzzleStatus = "ShapeWheel: controls=" .. tostring(#controls) .. " root=" .. tostring(root and root.Name or "none")
+        local raw, root = selectPuzzleControls("ShapeWheel", 6, {"shape", "wheel", "symbol", "circle"}, false)
+        if #raw < 3 then
+            raw, root = selectPuzzleControls("ShapeWheel", 3, {"shape", "wheel", "symbol", "circle"}, true)
+        end
+        local controls = collapseSlotControls(raw, 3)
+        puzzleStatus = "ShapeWheel: raw=" .. tostring(#raw)
+            .. " slots=" .. tostring(#controls)
+            .. " root=" .. tostring(root and root.Name or "none")
         if #controls ~= 3 then return false end
         local before = progressFingerprint()
         local counters = {0, 0, 0}
-        for _ = 1, 64 do
+        for attempt = 1, 64 do
             local carry = true
             for index = 1, 3 do
                 if carry then
@@ -2907,7 +2993,8 @@ return function(ctx)
                     if counters[index] >= 4 then counters[index] = 0 else carry = false end
                 end
             end
-            task.wait(0.008)
+            task.wait(0.012)
+            puzzleStatus = "ShapeWheel: " .. tostring(attempt) .. "/64"
             if localSolved(root) or progressFingerprint() ~= before then return true end
         end
         return false
