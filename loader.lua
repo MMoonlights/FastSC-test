@@ -66,11 +66,14 @@ end
 local Runtime = module("core/runtime.lua")
 local Common = module("core/common.lua")
 local Config = module("core/config.lua")
+local Telemetry = module("core/telemetry.lua")
 local Manifest = module("games/manifest.lua")
 local Menu = loadUI()
 local scope = Runtime.new("root")
 
 Config.Load()
+Telemetry.Init(Config)
+env.FastSCFeatureEvent = function(name) Telemetry.Feature(name) end
 
 local options = type(env.FastSCOptions) == "table" and env.FastSCOptions or {}
 local autoExecute = options.AutoExecute
@@ -147,6 +150,7 @@ function state.Unload()
     pcall(function() scope:Destroy() end)
     pcall(function() window:Destroy() end)
     if env.FastSCState == state then env.FastSCState = nil end
+    if env.FastSCFeatureEvent then env.FastSCFeatureEvent = nil end
 end
 
 env.FastSCState = state
@@ -164,11 +168,10 @@ local loadGame
 
 local function createSettings(entry)
     local settings = window:CreateTab("Settings", "S")
-    settings:CreateSection("Session")
-    settings:CreateLabel("Game: " .. entry.Name)
-    settings:CreateLabel("PlaceId: " .. tostring(game.PlaceId))
-    settings:CreateLabel("GameId / Universe: " .. tostring(game.GameId))
+    local feedbackText = ""
+    local consent = Telemetry.GetConsent()
 
+    settings:CreateSection("Interface")
     local activeKey = window:GetToggleKey()
     settings:CreateKeybind("Menu bind", activeKey, function(key)
         if key and key ~= activeKey then
@@ -177,13 +180,12 @@ local function createSettings(entry)
             Config.Set("MenuKey", key.Name)
         end
     end)
-
     settings:CreateDropdown("Theme", Menu:GetThemes(), window:GetTheme(), function(value)
         Config.Set("Theme", value)
         window:SetTheme(value)
     end)
 
-    settings:CreateSection("Automation")
+    settings:CreateSection("Startup")
     settings:CreateToggle("Auto Execute", Config.Get("AutoExecute", autoExecute), function(value)
         autoExecute = value
         Config.Set("AutoExecute", value)
@@ -193,20 +195,48 @@ local function createSettings(entry)
         if value then queueTpHandler() end
     end)
 
-    settings:CreateSection("Detection")
-    settings:CreateDropdown("Detect by", {"Auto", "PlaceId", "GameId"}, Config.Get("DetectMethod", detectMethod), function(value)
-        detectMethod = value
-        Config.Set("DetectMethod", value)
+    settings:CreateSection("Privacy")
+    local telemetryToggle
+    telemetryToggle = settings:CreateToggle("Anonymous telemetry", consent == true, function(value)
+        Telemetry.SetConsent(value)
+        if value then
+            Telemetry.Inject()
+            Telemetry.Module(entry)
+            Common.Notify("FastSC", "Anonymous telemetry enabled", 4)
+        else
+            Common.Notify("FastSC", "Anonymous telemetry disabled", 4)
+        end
+    end)
+    if consent == nil then
+        settings:CreateLabel("Telemetry is OFF until you choose. Sends executor, country, game/map and aggregate feature usage. No HWID, username or raw IP.")
+        settings:CreateButton("Allow telemetry", function()
+            Telemetry.SetConsent(true)
+            telemetryToggle:Set(true)
+        end)
+        settings:CreateButton("Decline telemetry", function()
+            Telemetry.SetConsent(false)
+            telemetryToggle:Set(false)
+        end)
+    end
+
+    settings:CreateSection("Feedback")
+    settings:CreateInput("Feedback", "Write feedback...", function(value)
+        feedbackText = tostring(value or "")
+    end, true)
+    settings:CreateButton("Send Feedback", function()
+        task.spawn(function()
+            local ok, message = Telemetry.Feedback(feedbackText)
+            Common.Notify("FastSC", message, ok and 4 or 6)
+        end)
     end)
 
-    settings:CreateSection("Navigation")
-    settings:CreateButton("Return to choose game", function()
+    settings:CreateSection("Actions")
+    settings:CreateButton("Choose game", function()
         showChooser()
     end)
-    settings:CreateButton("Reload current", function()
+    settings:CreateButton("Reload", function()
         loadGame(entry)
     end)
-    settings:CreateButton("Reload loader", reloadLoader)
     settings:CreateButton("Unload", state.Unload)
 end
 
@@ -216,6 +246,7 @@ loadGame = function(entry)
     local effectiveMode = (entry.Slug == "piggy" or entry.Slug == "piggy-intercity") and "Rage" or "Default"
     state.Entry = entry
     state.Mode = effectiveMode
+    Telemetry.SetEntry(entry)
     window:SetTitle("FastSC  |  " .. entry.Name)
 
     local gameScope = Runtime.new(entry.Slug)
@@ -226,6 +257,7 @@ loadGame = function(entry)
         Runtime = Runtime,
         Common = Common,
         Config = Config,
+        Telemetry = Telemetry,
         Entry = entry,
         Mode = effectiveMode,
         Repo = repo,
@@ -246,6 +278,7 @@ loadGame = function(entry)
     end)
 
     createSettings(entry)
+    if Telemetry.IsEnabled() then Telemetry.Module(entry) end
 
     if not ok then
         local errorTab = window:CreateTab("Error", "!")
@@ -276,6 +309,8 @@ showChooser = function()
 end
 
 local initialEntry = forcedSlug and Manifest.Get(forcedSlug) or detectedEntry
+
+if Telemetry.IsEnabled() then Telemetry.Inject() end
 
 if autoExecute and initialEntry then
     loadGame(initialEntry)
