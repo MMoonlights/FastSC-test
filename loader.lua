@@ -73,19 +73,45 @@ local scope = Runtime.new("root")
 Config.Load()
 
 local options = type(env.FastSCOptions) == "table" and env.FastSCOptions or {}
-local autoPlace = options.AutoPlace
-if autoPlace == nil then autoPlace = env.AutoPlace end
-if autoPlace == nil then autoPlace = Config.Get("AutoPlace", true) end
-
-local autoMode = options.AutoMode
-if autoMode == nil then autoMode = Config.Get("AutoMode", false) end
+local autoExecute = options.AutoExecute
+if autoExecute == nil then autoExecute = options.AutoPlace end
+if autoExecute == nil then autoExecute = env.AutoExecute end
+if autoExecute == nil then autoExecute = env.AutoPlace end
+if autoExecute == nil then autoExecute = Config.Get("AutoExecute", Config.Get("AutoPlace", true)) end
 
 local detectMethod = options.Detect or Config.Get("DetectMethod", "Auto")
 local forcedSlug = options.Game or options.Slug
-local forcedMode = options.Mode
 local themeName = Config.Get("Theme", "Crimson")
 local menuKeyName = Config.Get("MenuKey", "RightShift")
 local menuKey = Enum.KeyCode[menuKeyName] or Enum.KeyCode.RightShift
+
+local teleportQueue = queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport)
+local tpHandlerQueued = false
+local tpHandlerCode = [=[
+local enabled = true
+pcall(function()
+    if isfile and readfile and isfile("FastSC/config.json") then
+        local raw = readfile("FastSC/config.json")
+        local decoded = game:GetService("HttpService"):JSONDecode(raw)
+        local global = type(decoded) == "table" and (decoded.Global or decoded) or nil
+        if type(global) == "table" then
+            local value = global.TPHandler
+            if value == nil then value = global.TeleportReinject end
+            if value == false then enabled = false end
+        end
+    end
+end)
+if enabled then
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/MMoonlights/FastSC-test/main/loader.lua"))()
+end
+]=]
+
+local function queueTpHandler()
+    if not teleportQueue or tpHandlerQueued then return teleportQueue ~= nil end
+    local ok = pcall(teleportQueue, tpHandlerCode)
+    if ok then tpHandlerQueued = true end
+    return ok
+end
 
 Menu:SetTheme(themeName)
 
@@ -136,11 +162,10 @@ end
 local showChooser
 local loadGame
 
-local function createSettings(entry, mode)
+local function createSettings(entry)
     local settings = window:CreateTab("Settings", "S")
     settings:CreateSection("Session")
     settings:CreateLabel("Game: " .. entry.Name)
-    settings:CreateLabel("Mode: " .. mode)
     settings:CreateLabel("PlaceId: " .. tostring(game.PlaceId))
     settings:CreateLabel("GameId / Universe: " .. tostring(game.GameId))
 
@@ -158,48 +183,41 @@ local function createSettings(entry, mode)
         window:SetTheme(value)
     end)
 
-    settings:CreateSection("Detection")
-    settings:CreateToggle("AutoPlace", Config.Get("AutoPlace", autoPlace), function(value)
-        autoPlace = value
-        Config.Set("AutoPlace", value)
+    settings:CreateSection("Automation")
+    settings:CreateToggle("Auto Execute", Config.Get("AutoExecute", autoExecute), function(value)
+        autoExecute = value
+        Config.Set("AutoExecute", value)
     end)
+    settings:CreateToggle("TP Handler", Config.Get("TPHandler", Config.Get("TeleportReinject", true)), function(value)
+        Config.Set("TPHandler", value)
+        if value then queueTpHandler() end
+    end)
+
+    settings:CreateSection("Detection")
     settings:CreateDropdown("Detect by", {"Auto", "PlaceId", "GameId"}, Config.Get("DetectMethod", detectMethod), function(value)
         detectMethod = value
         Config.Set("DetectMethod", value)
     end)
-    settings:CreateToggle("Auto mode", Config.Get("AutoMode", autoMode), function(value)
-        autoMode = value
-        Config.Set("AutoMode", value)
-    end)
-    settings:CreateToggle("Teleport reinject", Config.Get("TeleportReinject", true), function(value)
-        Config.Set("TeleportReinject", value)
-    end)
 
     settings:CreateSection("Navigation")
     settings:CreateButton("Return to choose game", function()
-        showChooser(nil, true)
+        showChooser()
     end)
-    if #(entry.Modes or {"Default"}) > 1 then
-        settings:CreateButton("Return to choose mode", function()
-            showChooser(entry, false)
-        end)
-    end
     settings:CreateButton("Reload current", function()
-        loadGame(entry, mode)
+        loadGame(entry)
     end)
     settings:CreateButton("Reload loader", reloadLoader)
     settings:CreateButton("Unload", state.Unload)
 end
 
-loadGame = function(entry, mode)
+loadGame = function(entry)
     destroyGameScope()
     window:ClearTabs()
     state.Entry = entry
-    state.Mode = mode
-    Config.SetGame(entry.Slug, "LastMode", mode)
-    window:SetTitle("FastSC  |  " .. entry.Name .. (mode ~= "Default" and ("  |  " .. mode) or ""))
+    state.Mode = "Default"
+    window:SetTitle("FastSC  |  " .. entry.Name)
 
-    local gameScope = Runtime.new(entry.Slug .. "-" .. mode)
+    local gameScope = Runtime.new(entry.Slug)
     state.GameScope = gameScope
     local context = {
         Window = window,
@@ -208,16 +226,16 @@ loadGame = function(entry, mode)
         Common = Common,
         Config = Config,
         Entry = entry,
-        Mode = mode,
+        Mode = "Default",
         Repo = repo,
         ReturnToChooser = function()
-            showChooser(nil, true)
+            showChooser()
         end,
         ReturnToModes = function()
-            showChooser(entry, false)
+            showChooser()
         end,
         Reload = function()
-            loadGame(entry, mode)
+            loadGame(entry)
         end,
     }
 
@@ -226,7 +244,7 @@ loadGame = function(entry, mode)
         return gameModule(context)
     end)
 
-    createSettings(entry, mode)
+    createSettings(entry)
 
     if not ok then
         local errorTab = window:CreateTab("Error", "!")
@@ -236,7 +254,7 @@ loadGame = function(entry, mode)
     end
 end
 
-showChooser = function(entry, forceGameList)
+showChooser = function()
     destroyGameScope()
     window:ClearTabs()
     state.Entry = nil
@@ -244,54 +262,28 @@ showChooser = function(entry, forceGameList)
     window:SetTitle("FastSC  |  Choose")
 
     local chooser = window:CreateTab("Choose", "F")
-
-    local function renderGames()
-        chooser:Clear()
-        chooser:CreateSection("Detected")
-        chooser:CreateLabel("PlaceId: " .. tostring(game.PlaceId))
-        chooser:CreateLabel("GameId / Universe: " .. tostring(game.GameId))
-        chooser:CreateLabel(detectedEntry and ("Detected: " .. detectedEntry.Name .. " via " .. tostring(detectedBy)) or "Detected: unsupported")
-        chooser:CreateSection("Games")
-        for _, gameEntry in ipairs(Manifest.Games) do
-            chooser:CreateButton(gameEntry.Name, function()
-                showChooser(gameEntry, false)
-            end)
-        end
-    end
-
-    if forceGameList or not entry then
-        renderGames()
-        return
-    end
-
-    chooser:CreateSection(entry.Name)
-    chooser:CreateLabel("Choose mode")
-    for _, mode in ipairs(entry.Modes or {"Default"}) do
-        chooser:CreateButton(mode, function()
-            loadGame(entry, mode)
+    chooser:CreateSection("Detected")
+    chooser:CreateLabel("PlaceId: " .. tostring(game.PlaceId))
+    chooser:CreateLabel("GameId / Universe: " .. tostring(game.GameId))
+    chooser:CreateLabel(detectedEntry and ("Detected: " .. detectedEntry.Name .. " via " .. tostring(detectedBy)) or "Detected: unsupported")
+    chooser:CreateSection("Games")
+    for _, gameEntry in ipairs(Manifest.Games) do
+        chooser:CreateButton(gameEntry.Name, function()
+            loadGame(gameEntry)
         end)
     end
-    chooser:CreateButton("Back to games", renderGames)
 end
 
 local initialEntry = forcedSlug and Manifest.Get(forcedSlug) or detectedEntry
 
-if autoPlace and initialEntry then
-    local modes = initialEntry.Modes or {"Default"}
-    local preferredMode = forcedMode or Config.GetGame(initialEntry.Slug, "LastMode", modes[1])
-    if not Manifest.HasMode(initialEntry, preferredMode) then preferredMode = modes[1] end
-    if #modes == 1 or autoMode then
-        loadGame(initialEntry, preferredMode)
-    else
-        showChooser(initialEntry, false)
-    end
+if autoExecute and initialEntry then
+    loadGame(initialEntry)
 else
-    showChooser(nil, true)
+    showChooser()
 end
 
-local queue = queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport)
-if queue and Config.Get("TeleportReinject", true) then
-    pcall(queue, 'loadstring(game:HttpGet("' .. repo .. 'loader.lua"))()')
+if Config.Get("TPHandler", Config.Get("TeleportReinject", true)) then
+    queueTpHandler()
 end
 
 return state
