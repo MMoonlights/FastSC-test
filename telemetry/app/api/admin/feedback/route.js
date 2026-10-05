@@ -1,4 +1,5 @@
 import { json } from "../../../../lib/http";
+import { consumeRateLimit } from "../../../../lib/security";
 import { rpc } from "../../../../lib/supabase";
 
 export const runtime = "nodejs";
@@ -11,6 +12,7 @@ function adminKey(request) {
 }
 
 export async function GET(request) {
+  if (!(await consumeRateLimit(request, "admin:feedback", 20, 60))) return json({ error: "rate_limited" }, 429);
   const url = new URL(request.url);
   const limit = Math.max(1, Math.min(Number(url.searchParams.get("limit") || 100), 250));
   const result = await rpc("fastsc_admin_feedback", { p_key: adminKey(request), p_limit: limit });
