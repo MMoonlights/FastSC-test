@@ -1,5 +1,7 @@
-const url = process.env.FASTSC_SUPABASE_URL || "https://stkmzwhmuxzvaptuwcvr.supabase.co";
-const key = process.env.FASTSC_SUPABASE_KEY || "sb_publishable_OTMS_8cGZB5lm2iKTeWntw_nEaZgyXx";
+const url = process.env.FASTSC_SUPABASE_URL;
+const key = process.env.FASTSC_SUPABASE_KEY;
+
+if (!url || !key) throw new Error("FastSC telemetry storage is not configured");
 
 export async function supabase(path, init = {}) {
   return fetch(url + path, {
