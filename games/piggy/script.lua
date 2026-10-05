@@ -1981,23 +1981,44 @@ return function(ctx)
         return count > 0 and center / count or nil
     end
 
-    local function groupedControls(expected, keywords, allowDouble)
-        local _, events = mapAndEvents()
-        if not events then return {}, nil end
-        local controls = controlsUnder(events)
-        local groups = {}
+    local function puzzleEligibleControl(control)
+        if not control or not control.Parent then return false end
+        if playerCharacterAncestor(control) or underPiggyFolder(control) then return false end
+        if itemObjectFrom(control) or belongsToItem(control) then return false end
+        local current = control.Parent
+        for _ = 1, 4 do
+            if not current or current == workspace then break end
+            local lower = string.lower(current.Name)
+            if lower:find("trap", 1, true) then return false end
+            current = current.Parent
+        end
+        return controlPosition(control) ~= nil
+    end
 
+    local function groupedControls(expected, keywords, allowDouble)
+        local map, events = mapAndEvents()
+        if not map then return {}, nil end
+
+        local controls = {}
+        for _, control in ipairs(controlsUnder(map)) do
+            if puzzleEligibleControl(control) then
+                controls[#controls + 1] = control
+            end
+        end
+        controls = uniqueControls(controls)
+
+        local groups = {}
         for _, control in ipairs(controls) do
             local current = control.Parent
-            for _ = 1, 6 do
-                if not current or current == events.Parent then break end
+            for _ = 1, 7 do
+                if not current or current == workspace or current == map.Parent then break end
                 local group = groups[current]
                 if not group then
                     group = {}
                     groups[current] = group
                 end
                 group[#group + 1] = control
-                if current == events then break end
+                if current == map then break end
                 current = current.Parent
             end
         end
@@ -2005,19 +2026,24 @@ return function(ctx)
         local bestControls
         local bestRoot
         local bestScore = math.huge
+        local anchor = puzzleAnchorPosition()
 
         for root, group in pairs(groups) do
             group = uniqueControls(group)
             local count = #group
             local countDelta = math.abs(count - expected)
-            if allowDouble then countDelta = math.min(countDelta, math.abs(count - expected * 2)) end
+            if allowDouble then
+                countDelta = math.min(countDelta, math.abs(count - expected * 2))
+            end
             if count >= expected and count <= expected * 3 then
                 local words = keywordScore(root, keywords)
-                local score = countDelta * 1000 + boundsScore(group) - words * 250
-                local anchor = puzzleAnchorPosition()
+                local score = countDelta * 1400 + boundsScore(group) * 2 - words * 900
                 local center = anchor and groupCenter(group)
                 if anchor and center then
-                    score += math.min((center - anchor).Magnitude, 250) * 2
+                    score += math.min((center - anchor).Magnitude, 300)
+                end
+                if events and root:IsDescendantOf(events) then
+                    score -= 150
                 end
                 if score < bestScore then
                     bestControls = group
@@ -2028,7 +2054,7 @@ return function(ctx)
         end
 
         if bestControls then return bestControls, bestRoot end
-        return compactSubset(controls, expected), events
+        return compactSubset(controls, expected), map
     end
 
     local function selectPuzzleControls(kind, expected, keywords, allowDouble)
@@ -2224,38 +2250,82 @@ return function(ctx)
         return result
     end
 
+    local function controlPositiveScore(control)
+        if not control or not control.Parent then return 0 end
+        local text = ancestorText(control, 3)
+        if control:IsA("ProximityPrompt") then
+            text = text .. " " .. string.lower(tostring(control.ActionText or "")) .. " " .. string.lower(tostring(control.ObjectText or ""))
+        end
+        local label = control.Parent:FindFirstChildWhichIsA("TextLabel", true)
+        if label then text = text .. " " .. string.lower(tostring(label.Text or "")) end
+        local score = 0
+        if text:find("plus", 1, true) or text:find("add", 1, true) or text:find("increase", 1, true) or text:find("+", 1, true) then score += 10 end
+        if text:find("minus", 1, true) or text:find("subtract", 1, true) or text:find("decrease", 1, true) or text:find("-", 1, true) then score -= 10 end
+        if control.Parent:IsA("BasePart") then
+            local color = control.Parent.Color
+            if color.G > color.R * 1.25 and color.G > color.B * 1.1 then score += 4 end
+            if color.R > color.G * 1.25 and color.R > color.B * 1.1 then score -= 4 end
+        end
+        return score
+    end
+
     local function collapseSlotControls(controls, slots)
         controls = uniqueControls(controls)
         if #controls == slots then
             return linearOrder(controls, controlPosition)
         end
+
         if #controls >= slots * 2 then
+            controls = compactSubset(controls, slots * 2)
             local unused = {}
             for _, control in ipairs(controls) do unused[control] = true end
-            local chosen = {}
-            while #chosen < slots and next(unused) do
-                local first = next(unused)
+            local pairs = {}
+
+            while #pairs < slots and next(unused) do
+                local first
+                for control in pairs(unused) do
+                    first = control
+                    break
+                end
+                if not first then break end
                 unused[first] = nil
                 local firstPos = controlPosition(first)
                 local nearest
                 local nearestDistance = math.huge
+
                 for candidate in pairs(unused) do
                     local pos = controlPosition(candidate)
-                    if pos then
-                        local d = (pos - firstPos).Magnitude
-                        if d < nearestDistance then
+                    if pos and firstPos then
+                        local distance = (pos - firstPos).Magnitude
+                        if distance < nearestDistance then
                             nearest = candidate
-                            nearestDistance = d
+                            nearestDistance = distance
                         end
                     end
                 end
+
                 if nearest then unused[nearest] = nil end
-                chosen[#chosen + 1] = first
+                local selected = first
+                if nearest and controlPositiveScore(nearest) > controlPositiveScore(first) then
+                    selected = nearest
+                end
+
+                local a = firstPos or Vector3.zero
+                local b = nearest and controlPosition(nearest) or a
+                pairs[#pairs + 1] = {
+                    Control = selected,
+                    Position = (a + b) * 0.5,
+                }
             end
-            if #chosen == slots then
-                return linearOrder(chosen, controlPosition)
+
+            if #pairs == slots then
+                linearOrder(pairs, function(entry) return entry.Position end)
+                local result = {}
+                for index, entry in ipairs(pairs) do result[index] = entry.Control end
+                return result
             end
         end
+
         return compactSubset(controls, slots)
     end
 
