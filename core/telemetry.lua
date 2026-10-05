@@ -1,7 +1,8 @@
 local Telemetry = {}
 
 local HttpService = game:GetService("HttpService")
-local endpoint = "https://webc-livid.vercel.app/api/fastsc"
+local env = getgenv and getgenv() or _G
+local endpoint = env.FastSCTelemetryEndpoint or "https://fastsc-telemetry.vercel.app/api"
 local requestHttp = request or http_request or (syn and syn.request)
 local config
 local currentEntry
