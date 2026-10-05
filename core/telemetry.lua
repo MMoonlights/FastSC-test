@@ -106,11 +106,10 @@ end
 local function basePayload()
     return {
         executor = executorName(),
-        game = currentEntry and currentEntry.Name or "Loader",
-        slug = currentEntry and currentEntry.Slug or "",
         map = currentMap,
         version = version,
         placeId = tostring(game.PlaceId),
+        universeId = tostring(game.GameId),
     }
 end
 
