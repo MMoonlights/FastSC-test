@@ -310,12 +310,24 @@ end
 
 local initialEntry = forcedSlug and Manifest.Get(forcedSlug) or detectedEntry
 
-if Telemetry.IsEnabled() then Telemetry.Inject() end
-
-if autoExecute and initialEntry then
-    loadGame(initialEntry)
+if not initialEntry then
+    destroyGameScope()
+    window:ClearTabs()
+    state.Entry = nil
+    state.Mode = nil
+    window:SetTitle("FastSC")
+    local unsupported = window:CreateTab("Unsupported")
+    unsupported:CreateSection("Unsupported")
+    unsupported:CreateLabel("This place is not supported.")
+    unsupported:CreateButton("Close", state.Unload)
 else
-    showChooser()
+    Telemetry.SetEntry(initialEntry)
+    if Telemetry.IsEnabled() then Telemetry.Inject() end
+    if autoExecute then
+        loadGame(initialEntry)
+    else
+        showChooser()
+    end
 end
 
 if Config.Get("TPHandler", Config.Get("TeleportReinject", true)) then
