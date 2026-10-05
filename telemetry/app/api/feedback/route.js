@@ -10,6 +10,7 @@ export function OPTIONS() {
 }
 
 export async function POST(request) {
+  if (request.headers.get("x-fastsc-client") !== "luau-1") return json({ error: "invalid_client" }, 403);
   if (!verifySession(request)) return json({ error: "unauthorized" }, 401);
 
   try {
