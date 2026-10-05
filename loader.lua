@@ -310,6 +310,40 @@ end
 
 local initialEntry = forcedSlug and Manifest.Get(forcedSlug) or detectedEntry
 
+local function loadUniversal()
+    destroyGameScope()
+    window:ClearTabs()
+    local entry = {Name = "Universal", Slug = "universal", Modes = {"Default"}}
+    state.Entry = entry
+    state.Mode = "Default"
+    window:SetTitle("FastSC  |  Universal")
+
+    local gameScope = Runtime.new("universal")
+    state.GameScope = gameScope
+    local context = {
+        Window = window,
+        Scope = gameScope,
+        Runtime = Runtime,
+        Common = Common,
+        Config = Config,
+        Telemetry = Telemetry,
+        Entry = entry,
+        Mode = "Default",
+        Repo = repo,
+        Reload = loadUniversal,
+    }
+
+    local ok, result = pcall(function()
+        local gameModule = module("games/universal/script.lua")
+        return gameModule(context)
+    end)
+
+    if not ok then
+        local errorTab = window:CreateTab("Error")
+        errorTab:CreateLabel(tostring(result))
+    end
+end
+
 if not initialEntry then
     destroyGameScope()
     window:ClearTabs()
@@ -318,7 +352,9 @@ if not initialEntry then
     window:SetTitle("FastSC")
     local unsupported = window:CreateTab("Unsupported")
     unsupported:CreateSection("Unsupported")
-    unsupported:CreateLabel("This place is not supported.")
+    unsupported:CreateLabel("This game is not supported.")
+    unsupported:CreateLabel("You can load Universal mode with generic features that work across games.")
+    unsupported:CreateButton("Load Universal", loadUniversal)
     unsupported:CreateButton("Close", state.Unload)
 else
     Telemetry.SetEntry(initialEntry)
