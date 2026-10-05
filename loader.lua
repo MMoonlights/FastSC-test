@@ -213,8 +213,9 @@ end
 loadGame = function(entry)
     destroyGameScope()
     window:ClearTabs()
+    local effectiveMode = (entry.Slug == "piggy" or entry.Slug == "piggy-intercity") and "Rage" or "Default"
     state.Entry = entry
-    state.Mode = "Default"
+    state.Mode = effectiveMode
     window:SetTitle("FastSC  |  " .. entry.Name)
 
     local gameScope = Runtime.new(entry.Slug)
@@ -226,7 +227,7 @@ loadGame = function(entry)
         Common = Common,
         Config = Config,
         Entry = entry,
-        Mode = "Default",
+        Mode = effectiveMode,
         Repo = repo,
         ReturnToChooser = function()
             showChooser()
