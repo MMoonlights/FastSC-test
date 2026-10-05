@@ -1,18 +1,28 @@
-import { isAdmin } from "../../../../lib/auth";
 import { json } from "../../../../lib/http";
-import { recentFeedback } from "../../../../lib/stats";
+import { rpc } from "../../../../lib/supabase";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function adminKey(request) {
+  const auth = request.headers.get("authorization") || "";
+  if (auth.startsWith("Bearer ")) return auth.slice(7).trim();
+  return (request.headers.get("x-api-key") || "").trim();
+}
+
 export async function GET(request) {
-  if (!isAdmin(request)) return json({ error: "unauthorized" }, 401);
   const url = new URL(request.url);
-  const limit = Number(url.searchParams.get("limit") || 100);
-  try {
-    const feedback = await recentFeedback(limit);
-    return json({ generatedAt: new Date().toISOString(), count: feedback.length, feedback });
-  } catch {
+  const limit = Math.max(1, Math.min(Number(url.searchParams.get("limit") || 100), 250));
+  const result = await rpc("fastsc_admin_feedback", { p_key: adminKey(request), p_limit: limit });
+  if (!result.ok) {
+    if (String(result.data?.message || result.data).toLowerCase().includes("unauthorized")) {
+      return json({ error: "unauthorized" }, 401);
+    }
     return json({ error: "feedback_failed" }, 500);
   }
+  return json({
+    generatedAt: new Date().toISOString(),
+    count: Array.isArray(result.data) ? result.data.length : 0,
+    feedback: result.data || [],
+  });
 }
