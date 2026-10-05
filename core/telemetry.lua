@@ -2,13 +2,15 @@ local Telemetry = {}
 
 local HttpService = game:GetService("HttpService")
 local env = getgenv and getgenv() or _G
-local endpoint = env.FastSCTelemetryEndpoint or "https://fastsc-telemetry.vercel.app/api"
+local endpoint = env.FastSCTelemetryEndpoint or "https://fastsc.vercel.app/api"
 local requestHttp = request or http_request or (syn and syn.request)
 local config
 local currentEntry
 local currentMap = ""
 local version = "2026.10.05"
 local featureCooldown = {}
+local sessionToken
+local sessionUntil = 0
 
 local function executorName()
     local ok, a, b = pcall(function()
@@ -23,15 +25,78 @@ local function executorName()
     return tostring(a or "Unknown")
 end
 
-local function post(path, payload)
+local function responseBody(result)
+    if type(result) ~= "table" then return nil end
+    return result.Body or result.body or result.ResponseBody
+end
+
+local function statusCode(result)
+    if type(result) ~= "table" then return 0 end
+    return tonumber(result.StatusCode or result.Status or result.status_code or result.status) or 0
+end
+
+local function getSession(force)
+    if not requestHttp then return nil end
+    if not force and sessionToken and os.clock() < sessionUntil then
+        return sessionToken
+    end
+
+    local ok, result = pcall(requestHttp, {
+        Url = endpoint .. "/session",
+        Method = "POST",
+        Headers = {
+            ["Content-Type"] = "application/json",
+            ["X-FastSC-Client"] = "luau-1",
+        },
+        Body = "{}",
+    })
+    if not ok or statusCode(result) < 200 or statusCode(result) >= 300 then
+        sessionToken = nil
+        sessionUntil = 0
+        return nil
+    end
+
+    local raw = responseBody(result)
+    if type(raw) ~= "string" or raw == "" then return nil end
+
+    local decodedOk, decoded = pcall(HttpService.JSONDecode, HttpService, raw)
+    if not decodedOk or type(decoded) ~= "table" or type(decoded.token) ~= "string" then
+        return nil
+    end
+
+    sessionToken = decoded.token
+    local expiresIn = tonumber(decoded.expiresIn) or 900
+    sessionUntil = os.clock() + math.max(30, expiresIn - 20)
+    return sessionToken
+end
+
+local function post(path, payload, retry)
     if not requestHttp then return false end
+    local token = getSession(false)
+    if not token then return false end
+
     local ok, result = pcall(requestHttp, {
         Url = endpoint .. path,
         Method = "POST",
-        Headers = {["Content-Type"] = "application/json"},
+        Headers = {
+            ["Content-Type"] = "application/json",
+            ["Authorization"] = "Bearer " .. token,
+            ["X-FastSC-Client"] = "luau-1",
+        },
         Body = HttpService:JSONEncode(payload),
     })
-    return ok and result and tonumber(result.StatusCode) and result.StatusCode >= 200 and result.StatusCode < 300
+    if not ok then return false end
+
+    local status = statusCode(result)
+    if (status == 401 or status == 403) and retry ~= false then
+        sessionToken = nil
+        sessionUntil = 0
+        if getSession(true) then
+            return post(path, payload, false)
+        end
+    end
+
+    return status >= 200 and status < 300
 end
 
 local function enabled()
@@ -65,6 +130,10 @@ end
 function Telemetry.SetConsent(value)
     if not config then return end
     config.Set("TelemetryConsent", value == true)
+    if value ~= true then
+        sessionToken = nil
+        sessionUntil = 0
+    end
 end
 
 function Telemetry.SetEntry(entry)
