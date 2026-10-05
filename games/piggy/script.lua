@@ -2856,63 +2856,97 @@ return function(ctx)
     end
 
     local function solveLabLevers()
-        puzzleStatus = "ReactorLevers: discovering grid"
-        local gridRoot, grid = findLabGrid()
-        if #grid ~= 9 then
-            activateLabPower()
-            gridRoot, grid = findLabGrid()
-        end
-        if #grid ~= 9 then return false end
+        puzzleStatus = "ReactorLevers: discovering"
 
+        local gridRoot, grid = findLabGrid()
         local green = {}
-        for index, part in ipairs(grid) do
-            if colorIsGreen(part) then green[#green + 1] = index end
-        end
-        if #green ~= 3 then
-            activateLabPower()
-            gridRoot, grid = findLabGrid()
-            green = {}
+        if #grid == 9 then
             for index, part in ipairs(grid) do
                 if colorIsGreen(part) then green[#green + 1] = index end
             end
         end
-        if #green ~= 3 then
-            puzzleStatus = "ReactorLevers: grid=" .. tostring(#grid) .. " green=" .. tostring(#green)
-            return false
+
+        if #grid ~= 9 or #green ~= 3 then
+            activateLabPower()
+            gridRoot, grid = findLabGrid()
+            green = {}
+            if #grid == 9 then
+                for index, part in ipairs(grid) do
+                    if colorIsGreen(part) then green[#green + 1] = index end
+                end
+            end
         end
 
-        local controls, leverRoot = selectPuzzleControls(nil, 9, {"lever", "switch"}, false)
+        local controls, leverRoot = selectPuzzleControls(nil, 9, {"lever", "switch", "office", "room"}, false)
         controls = uniqueControls(controls)
         local filtered = {}
+
         for _, control in ipairs(controls) do
-            if not gridRoot or not control:IsDescendantOf(gridRoot) then filtered[#filtered + 1] = control end
+            if not gridRoot or not control:IsDescendantOf(gridRoot) then
+                filtered[#filtered + 1] = control
+            end
         end
-        if #filtered < 9 then
-            filtered = compactSubset(controls, 9)
-        elseif #filtered > 9 then
+
+        if #filtered ~= 9 then
             filtered = compactSubset(filtered, 9)
+            if #filtered ~= 9 then
+                filtered = compactSubset(controls, 9)
+            end
         end
-        puzzleStatus = "ReactorLevers: grid=9 green=3 levers=" .. tostring(#filtered)
+
+        puzzleStatus = "ReactorLevers: grid=" .. tostring(#grid)
+            .. " green=" .. tostring(#green)
+            .. " levers=" .. tostring(#filtered)
+
         if #filtered ~= 9 then return false end
-        local ordered = gridOrder(filtered, controlPosition)
-        if #ordered ~= 9 then return false end
 
         local before = progressFingerprint()
-        for transform = 0, 7 do
-            local chosen = {}
-            for _, index in ipairs(green) do
-                chosen[#chosen + 1] = ordered[transformGridIndex(index, transform)]
-            end
-            for _, control in ipairs(chosen) do
-                clickControl(control)
-                task.wait(0.04)
-            end
-            if waitForSolved(before, leverRoot, 0.45) then return true end
-            for _, control in ipairs(chosen) do
-                clickControl(control)
-                task.wait(0.025)
+
+        if #grid == 9 and #green == 3 then
+            local ordered = gridOrder(filtered, controlPosition)
+            if #ordered == 9 then
+                for transform = 0, 7 do
+                    local chosen = {}
+                    for _, index in ipairs(green) do
+                        chosen[#chosen + 1] = ordered[transformGridIndex(index, transform)]
+                    end
+                    for _, control in ipairs(chosen) do
+                        clickControl(control)
+                        task.wait(0.025)
+                    end
+                    if waitForSolved(before, leverRoot, 0.22) then return true end
+                    for _, control in ipairs(chosen) do
+                        clickControl(control)
+                        task.wait(0.015)
+                    end
+                end
             end
         end
+
+        puzzleStatus = "ReactorLevers: exhaustive 0/511"
+        local previousGray = 0
+        for step = 1, 511 do
+            local gray = bit32.bxor(step, bit32.rshift(step, 1))
+            local changed = bit32.bxor(gray, previousGray)
+            previousGray = gray
+
+            for bit = 0, 8 do
+                if bit32.band(changed, bit32.lshift(1, bit)) ~= 0 then
+                    clickControl(filtered[bit + 1])
+                    break
+                end
+            end
+
+            if step % 16 == 0 then
+                puzzleStatus = "ReactorLevers: exhaustive " .. tostring(step) .. "/511"
+            end
+
+            task.wait(0.008)
+            if localSolved(leverRoot) or progressFingerprint() ~= before then
+                return true
+            end
+        end
+
         return false
     end
 
@@ -3005,7 +3039,9 @@ return function(ctx)
         local profile = mapProfiles[mapName]
         local puzzle = profile and profile.Puzzle
         if not puzzle then return false end
-        if solvedPuzzles[mapName .. ":" .. puzzle] and not force then return false end
+        local puzzleKey = mapName .. ":" .. puzzle
+        local solvedAt = solvedPuzzles[puzzleKey]
+        if solvedAt and not force and os.clock() - solvedAt < 1.5 then return false end
         if puzzleBusy or (not force and os.clock() < puzzleRetryAt) then return false end
 
         puzzleBusy = true
@@ -3022,12 +3058,12 @@ return function(ctx)
 
         if ok and solved then
             puzzleStatus = puzzle .. ": solved"
-            solvedPuzzles[mapName .. ":" .. puzzle] = true
+            solvedPuzzles[puzzleKey] = os.clock()
             puzzleRetryAt = os.clock() + 0.2
             return true
         end
         if not ok then
-            puzzleStatus = puzzle .. ": error"
+            puzzleStatus = puzzle .. ": error " .. tostring(solved):sub(1, 80)
         elseif puzzleStatus == "idle" then
             puzzleStatus = puzzle .. ": not ready"
         end
