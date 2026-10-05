@@ -1,5 +1,5 @@
 {
-  "name": "fastsc-telemetry",
+  "name": "fastsc-telemetry-api",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -7,7 +7,6 @@
     "start": "next start"
   },
   "dependencies": {
-    "@vercel/blob": "^2.0.0",
     "next": "^16.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
