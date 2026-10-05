@@ -190,6 +190,13 @@ for token in [
     "waitForSolved",
     "ReactorGrid",
     "cyclePuzzle",
+    "puzzleEligibleControl",
+    "controlPositiveScore",
+    "ColorCode: attempt",
+    'selectPuzzleControls("DigitCode", 6',
+    "ReactorLevers: exhaustive",
+    "511",
+    "solvedAt",
     "solveCodePanel",
     "beginAutomationMove",
     "endAutomationMove",
@@ -234,6 +241,10 @@ assert "scope:Connect(RunService.Heartbeat" not in piggy
 assert "PathfindingService" not in piggy
 assert "computeReachable" not in piggy
 assert "reachabilityPending" not in piggy
+assert "if lit == 0 then return true end" not in piggy
+assert 'os.clock() - solvedAt < 1.5' in piggy
+assert 'for step = 1, 511 do' in piggy
+assert 'selectPuzzleControls("DigitCode", 6' in piggy
 assert 'PuzzleBefore = {"WhiteKey"}' in piggy
 assert "isObjectiveRequirement" in piggy
 assert "currentEventsRoot" in piggy
