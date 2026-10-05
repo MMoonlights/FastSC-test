@@ -2,7 +2,7 @@ local Telemetry = {}
 
 local HttpService = game:GetService("HttpService")
 local env = getgenv and getgenv() or _G
-local endpoint = env.FastSCTelemetryEndpoint or "https://fastscripts-mmoonlight.vercel.app/api"
+local endpoint = env.FastSCTelemetryEndpoint or "https://fastscripts.vercel.app/api"
 local requestHttp = request or http_request or (syn and syn.request)
 local config
 local currentEntry
