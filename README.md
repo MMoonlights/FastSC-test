@@ -1,6 +1,6 @@
 # FastSC
 
-FastSC is a modular Luau loader for supported Roblox games. It can detect a game by exact PlaceId or fall back to Roblox GameId / universe, shows a chooser when needed, loads one game mode at a time, scopes feature connections for cleanup, and requeues itself after teleports when the executor supports teleport queuing.
+FastSC is a modular Luau loader for supported Roblox games. It can detect a game by exact PlaceId or fall back to Roblox GameId / universe, shows a chooser when needed, loads one complete game module at a time, scopes feature connections for cleanup, and can requeue itself after teleports when the executor supports teleport queuing.
 
 ## Load
 
@@ -14,43 +14,39 @@ The repository must be public for unauthenticated raw.githubusercontent.com load
 
 ```lua
 getgenv().FastSCOptions = {
-    AutoPlace = true,
-    AutoMode = false,
+    AutoExecute = true,
     Detect = "Auto",
     Game = nil,
-    Mode = nil,
 }
 
 loadstring(game:HttpGet("https://raw.githubusercontent.com/MMoonlights/FastSC-test/main/loader.lua"))()
 ```
 
-`AutoPlace = true` selects the detected supported game automatically. `AutoPlace = false` always opens the game chooser.
+`AutoExecute = true` loads the detected supported game immediately. `AutoExecute = false` opens the game chooser.
 
 `Detect = "Auto"` tries exact PlaceId first and then GameId / universe. It can also be set to `"PlaceId"` or `"GameId"`.
 
-`AutoMode = false` opens the mode chooser when a game has multiple modes. `AutoMode = true` loads the forced or last selected mode.
+`Game` can force a manifest slug such as `"piggy"`.
 
-`Game` can force a manifest slug such as `"piggy"`. `Mode` can force a mode such as `"Rage"`.
-
-`getgenv().AutoPlace = false` is also supported as a simple compatibility override.
+The old `AutoPlace` option is still read as a compatibility fallback, but the UI and saved configuration use `Auto Execute`.
 
 ## Chooser and settings
 
-Selecting a game replaces the chooser with its mode selector. Selecting a mode clears the chooser and loads only that mode.
+Selecting a game loads its complete module directly. There is no Legit / Rage mode chooser.
 
 Every loaded game receives a Settings tab with:
 
 - menu keybind
 - live theme switching
-- AutoPlace
+- Auto Execute
+- TP Handler
 - detection strategy
-- AutoMode
-- teleport reinject
 - Return to choose game
-- Return to choose mode when available
 - reload current
 - reload loader
 - unload
+
+`TP Handler` controls teleport reinjection and reads the saved setting again after teleport.
 
 Themes currently available through Moon UI are Crimson, Purple, Ocean, Emerald, and Amber.
 
@@ -58,18 +54,11 @@ Themes currently available through Moon UI are Crimson, Purple, Ocean, Emerald, 
 
 Classic Piggy is detected by its exact Book 1 / Book 2 places and by the classic Piggy universe, so additional places in the same universe can fall back through `game.GameId`.
 
-Modes:
-
-- Legit
-- Rage
-
-Legit includes item selection, item grabbing, item teleport, item / player / Piggy / trap ESP, fullbright and restricted movement controls.
-
-Rage adds a generic objective completion loop, automatic item collection and interaction, trap bypass, local door bypass, bot freeze, higher movement limits and the same cached ESP/item engine.
+Piggy now opens the full profile directly. There is no separate Legit / Rage chooser; automation, item controls, ESP, player controls and bypass controls are available from one loaded profile.
 
 ## Piggy: Intercity
 
-Piggy: Intercity is treated as its own experience rather than as a classic Piggy chapter. The full release and current demo are mapped separately from classic Piggy and also support Legit / Rage selection.
+Piggy: Intercity is treated as its own experience rather than as a classic Piggy chapter. The full release and current demo are mapped separately from classic Piggy and open the full profile directly.
 
 Current module includes:
 
@@ -81,7 +70,7 @@ Current module includes:
 - jump
 - infinite jump
 - noclip
-- Rage enemy hitbox controls
+- enemy hitbox controls
 
 ## Auto execute
 
