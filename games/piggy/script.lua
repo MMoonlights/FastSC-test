@@ -4554,6 +4554,12 @@ end)()
 
         local handle = tool and (tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart", true))
         local eventParts = objectiveEventParts(objective)
+        local rootPart = character:FindFirstChild("HumanoidRootPart")
+        if rootPart and #eventParts > 1 then
+            table.sort(eventParts, function(a, b)
+                return (a.Position - rootPart.Position).Magnitude < (b.Position - rootPart.Position).Magnitude
+            end)
+        end
         local before = progressFingerprint()
         local targetBefore = objective.Target and tostring(objective.Target:GetFullName()) or ""
         local targetPartBefore = objective.Part and objective.Part.Parent and table.concat({
@@ -4576,7 +4582,6 @@ end)()
                     beginAutomationMove(eventPart.CFrame + eventPart.CFrame.LookVector * -1.5 + Vector3.new(0, 1, 0))
                     task.wait(0.025)
                     automationDeadline = os.clock() + 2
-                    humanoid.Jump = true
 
                     local touchPart = handle
                     if not touchPart or not touchPart.Parent then
@@ -4601,7 +4606,6 @@ end)()
             end
         end)
 
-        humanoid.Jump = false
         task.wait(0.05)
         local completed = objective.Synthetic and false or not objectiveStillActive(objective)
         local toolConsumed = tool and (not tool.Parent or tool.Parent ~= toolParent)
