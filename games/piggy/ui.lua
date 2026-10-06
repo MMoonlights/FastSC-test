@@ -135,6 +135,7 @@ if mode == "Rage" then
     Actions.setupObjectiveHelper(rage)
     rage:CreateToggle("Auto Object / Full run", false, function(value)
         autoComplete = value
+        setAutomationHold(value)
         releaseAutomation()
         if value then
             Round.resetRoundAutomation()
@@ -149,6 +150,7 @@ if mode == "Rage" then
     end)
     rage:CreateToggle("Auto grab items", false, function(value)
         autoGrab = value
+        if value then setAutomationHold(false) end
         releaseAutomation()
         if value then
             autoComplete = false
@@ -165,6 +167,7 @@ if mode == "Rage" then
     end)
     rage:CreateToggle("Auto interact", false, function(value)
         autoInteract = value
+        if value then setAutomationHold(false) end
         releaseAutomation()
         if value then
             autoComplete = false
@@ -221,6 +224,11 @@ else
     Actions.setupPlayerTab(playerTab, false)
 end
 
+scope:Connect(localPlayer.CharacterAdded, function()
+    task.wait(0.2)
+    if autoComplete then setAutomationHold(true) end
+end)
+
 scope:Connect(UserInputService.JumpRequest, function()
     if infiniteJump then
         local humanoid = localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid")
@@ -255,6 +263,7 @@ scope:AddRestore(function()
     autoComplete = false
     autoGrab = false
     autoInteract = false
+    setAutomationHold(false)
     escapeTouchOverride = false
     releaseAutomation()
     clearKind()
