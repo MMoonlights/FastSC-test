@@ -74,6 +74,14 @@ local function module(path)
     return chunk()
 end
 
+local function loadIntoEnv(path, envTable)
+    local chunk, errorMessage = loadstring(source(path), "@FastSC/" .. path)
+    if not chunk then error(errorMessage) end
+    if not setfenv then error("FastSC requires setfenv for modular legacy chunks") end
+    setfenv(chunk, envTable)
+    return chunk()
+end
+
 local function loadUI()
     local ok, result = pcall(function()
         return loadstring(fetchUrl(uiUrl, "ui:v3", 60), "@FastSC/UI")()
@@ -290,6 +298,7 @@ loadGame = function(entry)
         Mode = effectiveMode,
         Repo = repo,
         Module = module,
+        LoadIntoEnv = loadIntoEnv,
         ReturnToChooser = function()
             showChooser()
         end,
@@ -360,6 +369,7 @@ local function loadUniversal()
         Mode = "Default",
         Repo = repo,
         Module = module,
+        LoadIntoEnv = loadIntoEnv,
         Reload = loadUniversal,
     }
 
