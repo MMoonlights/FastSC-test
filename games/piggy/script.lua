@@ -3752,8 +3752,41 @@ return function(ctx)
     end
 
 
+    local function namedPuzzleControls(expected, keywords, allowDouble)
+        local map = currentMapModel()
+        if not map then return {}, nil end
+
+        local bestControls
+        local bestRoot
+        local bestScore = math.huge
+
+        for _, root in ipairs(map:GetDescendants()) do
+            if root:IsA("Model") or root:IsA("Folder") or root:IsA("BasePart") then
+                local words = keywordScore(root, keywords)
+                if words > 0 then
+                    local controls = uniqueControls(controlsUnder(root))
+                    local count = #controls
+                    local countDelta = math.abs(count - expected)
+                    if allowDouble then
+                        countDelta = math.min(countDelta, math.abs(count - expected * 2))
+                    end
+                    if count >= expected and count <= expected * 3 then
+                        local score = countDelta * 1000 + boundsScore(controls) - words * 300
+                        if score < bestScore then
+                            bestControls = controls
+                            bestRoot = root
+                            bestScore = score
+                        end
+                    end
+                end
+            end
+        end
+
+        return bestControls or {}, bestRoot
+    end
+
     local function solveHuntBookPuzzle()
-        local controls, root = groupedControls(3, {"book", "library", "shelf"}, false)
+        local controls, root = namedPuzzleControls(3, {"book", "library", "shelf"}, false)
         controls = uniqueControls(controls)
         if #controls < 3 then return false end
         controls = compactSubset(controls, 3)
@@ -3781,7 +3814,7 @@ return function(ctx)
     end
 
     local function solveHuntDials()
-        local controls, root = groupedControls(3, {"valve", "dial", "cool", "engine", "time"}, false)
+        local controls, root = namedPuzzleControls(3, {"valve", "dial", "cool", "engine"}, false)
         controls = uniqueControls(controls)
         if #controls < 3 then return false end
         controls = compactSubset(controls, 3)
@@ -3792,9 +3825,9 @@ return function(ctx)
     end
 
     local function solveHuntCoordinates()
-        local raw, root = groupedControls(6, {"coordinate", "coord", "time", "machine", "x", "y", "z"}, true)
+        local raw, root = namedPuzzleControls(6, {"coordinate", "coord", "time", "machine"}, true)
         if #raw < 3 then
-            raw, root = groupedControls(3, {"coordinate", "coord", "time", "machine"}, true)
+            raw, root = namedPuzzleControls(3, {"coordinate", "coord", "time", "machine"}, true)
         end
         local controls = collapseSlotControls(raw, 3)
         if #controls ~= 3 then return false end
@@ -3804,7 +3837,7 @@ return function(ctx)
     end
 
     local function solveHuntVault()
-        local raw, root = groupedControls(3, {"vault", "ring", "safe", "button"}, false)
+        local raw, root = namedPuzzleControls(3, {"vault", "ring", "safe"}, false)
         raw = uniqueControls(raw)
         if #raw < 3 then return false end
         local controls = compactSubset(raw, 3)
