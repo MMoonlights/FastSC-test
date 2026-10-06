@@ -266,10 +266,33 @@ return function(ctx)
         return false
     end
 
+    local function genericPickupParent(instance)
+        if not instance or instance.Name ~= "Script" or not instance:IsA("Script") then return nil end
+        local parent = instance.Parent
+        local folder = parent and parent.Parent
+        if not parent or not folder or not folder:IsA("Folder") then return nil end
+        if parent:FindFirstChildOfClass("Sound") then return nil end
+
+        local hasItemVisual = parent:FindFirstChildWhichIsA("SpecialMesh", true)
+            or parent:FindFirstChildWhichIsA("MeshPart", true)
+            or parent:FindFirstChildWhichIsA("ParticleEmitter", true)
+        local folderName = string.lower(folder.Name)
+        local looksLikeItemFolder = folderName:find("item", 1, true)
+            or folderName:find("pickup", 1, true)
+            or folderName:find("spawn", 1, true)
+
+        if hasItemVisual and looksLikeItemFolder then return parent end
+        return nil
+    end
+
     local function itemObjectFrom(instance)
         if pickupScriptNames[instance.Name] and instance.Parent then
             return instance.Parent
         end
+
+        local generic = genericPickupParent(instance)
+        if generic then return generic end
+
         local current = instance
         while current and current ~= workspace do
             if hasPickupScript(current) then return current end
