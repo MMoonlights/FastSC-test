@@ -988,6 +988,7 @@ function grabItem(item, returnAfter, expectedId)
     end
 
     local owned
+    local pickupMethod = "unknown"
     local success = pcall(function()
         local confirmWindows = {0.8, 1.0, 1.2}
 
@@ -1004,6 +1005,17 @@ function grabItem(item, returnAfter, expectedId)
             -- Re-resolve detectors every attempt because staged Piggy pickups can
             -- replace their interaction instance after the first server response.
             click, prompt, touch = detectorFor(item)
+            if click then
+                pickupMethod = "ClickDetector"
+            elseif prompt then
+                pickupMethod = "ProximityPrompt"
+            elseif touch then
+                pickupMethod = "TouchTransmitter"
+            elseif firetouchinterest then
+                pickupMethod = "touch fallback"
+            else
+                pickupMethod = "none"
+            end
 
             -- Item pickup is intentionally different from door/objective use:
             -- classic Piggy requires the HRP to be at the item's own CFrame
@@ -1068,7 +1080,7 @@ function grabItem(item, returnAfter, expectedId)
     end
 
     if item.Parent then
-        lastPickupStatus = "server did not confirm pickup"
+        lastPickupStatus = "server did not confirm pickup via " .. pickupMethod
         if isWorldItem(item) then indexItem(item) end
     else
         lastPickupStatus = "item despawned, waiting for inventory replication failed"
