@@ -936,6 +936,39 @@ return function(ctx)
             and (mesh.Scale - Vector3.new(0.75, 0.5, 0.75)).Magnitude <= 0.08
     end
 
+    local function requirementHost(value)
+        local current = value and value.Parent
+        local fallback
+        for _ = 1, 6 do
+            if not current or current == workspace then break end
+            if items[current] then return nil end
+            if current:IsA("BasePart") or current:IsA("Model") then
+                fallback = fallback or current
+                if requirementEventMesh(current) then return current end
+                if current:FindFirstChildWhichIsA("ClickDetector", true)
+                    or current:FindFirstChildWhichIsA("ProximityPrompt", true)
+                    or current:FindFirstChildWhichIsA("TouchTransmitter", true) then
+                    return current
+                end
+                local lower = string.lower(current.Name)
+                if lower:find("door", 1, true)
+                    or lower:find("gate", 1, true)
+                    or lower:find("lock", 1, true)
+                    or lower:find("safe", 1, true)
+                    or lower:find("panel", 1, true)
+                    or lower:find("power", 1, true)
+                    or lower:find("gear", 1, true)
+                    or lower:find("generator", 1, true)
+                    or lower:find("machine", 1, true)
+                    or lower:find("event", 1, true) then
+                    return current
+                end
+            end
+            current = current.Parent
+        end
+        return fallback
+    end
+
     local function isObjectiveRequirement(value)
         if not value or not value.Parent or not value:IsA("StringValue") then return false end
         if not aliases[token(value.Value)] then return false end
@@ -946,13 +979,14 @@ return function(ctx)
 
         if value.Name == "ToolRequired" then return true end
 
-        local events = currentEventsRoot()
-        if events and value:IsDescendantOf(events) then
-            local parent = value.Parent
-            if requirementEventMesh(parent) then return true end
-            if parent:FindFirstChildWhichIsA("ClickDetector", true)
-                or parent:FindFirstChildWhichIsA("ProximityPrompt", true)
-                or parent:FindFirstChildWhichIsA("TouchTransmitter", true) then
+        local host = requirementHost(value)
+        if host then
+            local events = currentEventsRoot()
+            if events and value:IsDescendantOf(events) then return true end
+            if requirementEventMesh(host) then return true end
+            if host:FindFirstChildWhichIsA("ClickDetector", true)
+                or host:FindFirstChildWhichIsA("ProximityPrompt", true)
+                or host:FindFirstChildWhichIsA("TouchTransmitter", true) then
                 return true
             end
         end
@@ -985,6 +1019,27 @@ return function(ctx)
             scope:Connect(value:GetPropertyChangedSignal("Value"), function()
                 updateRequirement(value)
             end)
+            scope:Connect(value.AncestryChanged, function()
+                if value.Parent then updateRequirement(value) end
+            end)
+        end
+    end
+
+    local function refreshRequirementsNear(instance)
+        local current = instance and instance.Parent
+        local seen = {}
+        for _ = 1, 5 do
+            if not current or current == workspace then break end
+            for _, descendant in ipairs(current:GetDescendants()) do
+                if descendant:IsA("StringValue") and not seen[descendant] then
+                    seen[descendant] = true
+                    if requirements[descendant] or aliases[token(descendant.Value)] then
+                        trackRequirement(descendant)
+                        updateRequirement(descendant)
+                    end
+                end
+            end
+            current = current.Parent
         end
     end
 
@@ -1227,6 +1282,9 @@ return function(ctx)
         end
         if instance:IsA("ClickDetector") or instance:IsA("ProximityPrompt") then
             interactives[instance] = true
+            refreshRequirementsNear(instance)
+        elseif instance:IsA("TouchTransmitter") then
+            refreshRequirementsNear(instance)
         end
         if instance:IsA("StringValue") then
             trackRequirement(instance)
