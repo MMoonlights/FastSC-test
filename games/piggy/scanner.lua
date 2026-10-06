@@ -347,9 +347,24 @@ end
 
 function ancestorRequirementLocks(item)
     local map = currentMapModel()
-    local current = item.Parent
-    for _ = 1, 6 do
+    local current = item
+
+    for _ = 1, 7 do
         if not current or current == workspace or current == map then break end
+
+        -- ItemFolder/Items/Spawn folders are shared containers. Looking through
+        -- every requirement below them makes one locked pickup hide unrelated
+        -- items in the same folder, which can stall Full Run on a valid item.
+        if current ~= item and current:IsA("Folder") then
+            local name = token(current.Name)
+            if name == "items"
+                or name == "itemfolder"
+                or name == "itemfolder1"
+                or name:find("pickup", 1, true)
+                or name:find("spawn", 1, true) then
+                break
+            end
+        end
 
         for _, child in ipairs(current:GetChildren()) do
             if child:IsA("StringValue") then
@@ -369,7 +384,6 @@ function ancestorRequirementLocks(item)
     end
     return false
 end
-
 function isAvailableWorldItem(item)
     if not isWorldItem(item) then return false end
     local part = getPart(item)
@@ -761,7 +775,52 @@ scope:Loop("visuals", 0.25, refreshVisuals)
 
 function detectorFor(item)
     if not item then return nil end
-    return item:FindFirstChildWhichIsA("ClickDetector", true), item:FindFirstChildWhichIsA("ProximityPrompt", true)
+    return item:FindFirstChildWhichIsA("ClickDetector", true),
+        item:FindFirstChildWhichIsA("ProximityPrompt", true),
+        item:FindFirstChildWhichIsA("TouchTransmitter", true)
+end
+
+function firePickupInteraction(item, part)
+    if not item or not item.Parent or not part or not part.Parent then return false end
+
+    local fired = false
+    local click, prompt, touch = detectorFor(item)
+
+    if click and click.Parent and fireclickdetector then
+        local oldDistance = click.MaxActivationDistance
+        pcall(function() click.MaxActivationDistance = math.huge end)
+        pcall(fireclickdetector, click)
+        pcall(function() click.MaxActivationDistance = oldDistance end)
+        fired = true
+    end
+
+    if prompt and prompt.Parent and prompt.Enabled and fireproximityprompt then
+        local oldHold = prompt.HoldDuration
+        pcall(function() prompt.HoldDuration = 0 end)
+        pcall(fireproximityprompt, prompt)
+        pcall(function() prompt.HoldDuration = oldHold end)
+        fired = true
+    end
+
+    -- Several Piggy pickup variants are touch-backed even when their visible
+    -- pickup model also contains a Script/ItemHandler. Always try a server-side
+    -- touch as a fallback so Full Run is not limited to click/prompt items.
+    local root = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if root and firetouchinterest then
+        local touchPart = touch and touch.Parent
+        if not touchPart or not touchPart:IsA("BasePart") then touchPart = part end
+
+        if touchPart and touchPart.Parent then
+            Common.Touch(root, touchPart)
+            fired = true
+        end
+        if part ~= touchPart and part.Parent then
+            Common.Touch(root, part)
+            fired = true
+        end
+    end
+
+    return fired
 end
 
 function itemList()
@@ -877,10 +936,11 @@ function grabItem(item, returnAfter, expectedId)
         return false
     end
 
-    local click, prompt = detectorFor(item)
-    local useClick = click and click.Parent and fireclickdetector
-    local usePrompt = not useClick and prompt and prompt.Parent and fireproximityprompt
-    if not useClick and not usePrompt then
+    local click, prompt, touch = detectorFor(item)
+    if not (click and fireclickdetector)
+        and not (prompt and fireproximityprompt)
+        and not (touch and firetouchinterest)
+        and not firetouchinterest then
         lastPickupStatus = "item has no supported pickup interaction"
         return false
     end
@@ -902,38 +962,63 @@ function grabItem(item, returnAfter, expectedId)
                 local ownedTool = findOwnedById(expectedId)
                 if ownedTool then return ownedTool end
             end
-            task.wait(0.05)
+            task.wait(0.04)
         until os.clock() >= deadline
     end
 
     local owned
     local success = pcall(function()
-        for attempt = 1, 2 do
-            if cancelled() then break end
-            part = getPart(item)
-            if not part then break end
-            local target = part.CFrame + Vector3.new(0, 2.5, 0)
-            beginAutomationMove(target)
-            task.wait(0.025)
+        local confirmWindows = {0.45, 0.65, 0.9}
 
-            if useClick and click and click.Parent then
-                pcall(fireclickdetector, click)
-            elseif usePrompt and prompt and prompt.Parent then
-                pcall(fireproximityprompt, prompt)
+        for attempt = 1, 3 do
+            if cancelled() then break end
+            if expectedId and findOwnedById then
+                owned = findOwnedById(expectedId)
+                if owned then break end
             end
 
-            owned = confirm(attempt == 1 and 0.55 or 0.8)
+            part = getPart(item)
+            if not part then break end
+
+            -- Re-resolve detectors every attempt because staged Piggy pickups can
+            -- replace their interaction instance after the first server response.
+            click, prompt, touch = detectorFor(item)
+
+            local target = part.CFrame + Vector3.new(0, 1.75, 0)
+            beginAutomationMove(target)
+            automationDeadline = os.clock() + 3
+            task.wait(0.04)
+
+            local fired = firePickupInteraction(item, part)
+            if not fired then
+                lastPickupStatus = "pickup interaction unavailable"
+                break
+            end
+
+            owned = confirm(confirmWindows[attempt])
             if owned then break end
-            if not item.Parent then break end
+
+            -- If the world model disappeared, keep waiting for the Tool replica
+            -- instead of immediately selecting another objective.
+            if not item.Parent then
+                owned = confirm(0.9)
+                break
+            end
+
+            task.wait(0.04)
         end
 
         if not owned then
-            owned = confirm(0.7)
+            owned = confirm(0.9)
         end
     end)
 
     if not cancelled() then endAutomationMove() end
-    if (returnAfter or not owned) and not cancelled() then
+
+    -- Manual "Grab selected" returns to the old position. Full Run deliberately
+    -- stays beside a failed pickup so the next retry does not bounce back and
+    -- forth between the item and the previous objective.
+    if returnAfter and not cancelled() then
         if root and root.Parent then
             root.CFrame = old
             root.AssemblyLinearVelocity = Vector3.zero
@@ -960,12 +1045,12 @@ function grabItem(item, returnAfter, expectedId)
 
     if item.Parent then
         lastPickupStatus = "server did not confirm pickup"
+        if isWorldItem(item) then indexItem(item) end
     else
-        lastPickupStatus = "item despawned, but no Tool appeared in inventory"
+        lastPickupStatus = "item despawned, waiting for inventory replication failed"
     end
     return false
 end
-
 function teleportItem(item)
     local part = getPart(item)
     if part then Common.Root().CFrame = part.CFrame + Vector3.new(0, 3, 0) end
