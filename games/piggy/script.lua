@@ -4575,21 +4575,44 @@ end)()
         return Solver.objectiveStillActive(objective)
     end
 
+    function Solver.ensureEquipped(id, timeout)
+        local character = localPlayer.Character
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+        if not character or not humanoid then return nil end
+
+        local deadline = os.clock() + (timeout or 0.65)
+        repeat
+            local tool = findOwnedById(id)
+            if tool and tool.Parent == character then return tool end
+
+            if tool and tool.Parent then
+                pcall(function()
+                    humanoid:EquipTool(tool)
+                end)
+            end
+
+            task.wait(0.04)
+            tool = findOwnedById(id)
+            if tool and tool.Parent == character then return tool end
+        until os.clock() >= deadline or not autoComplete
+
+        return nil
+    end
+
     function Solver.activateObjective(objective)
         if not objective or not objective.Target or not objective.Target.Parent then return false end
 
         local character = localPlayer.Character
         local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-        local tool = findOwnedById(objective.Id)
-        if not character or not humanoid or not tool then return false end
+        if not character or not humanoid then return false end
 
-        if tool.Parent ~= character then
-            humanoid:EquipTool(tool)
-            task.wait(0.03)
-            tool = findOwnedById(objective.Id) or character:FindFirstChildWhichIsA("Tool")
+        local tool = Solver.ensureEquipped(objective.Id, 0.7)
+        if not tool or tool.Parent ~= character then
+            lastPickupStatus = "failed to equip " .. (displayNames[objective.Id] or tostring(objective.Id))
+            return false
         end
 
-        local handle = tool and (tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart", true))
+        local handle = tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart", true)
         local eventParts = Solver.objectiveEventParts(objective)
         local rootPart = character:FindFirstChild("HumanoidRootPart")
         if rootPart and #eventParts > 1 then
@@ -4616,8 +4639,15 @@ end)()
                     if not Solver.objectiveNeedsActivation(objective) then break end
                     if not eventPart.Parent then continue end
 
+                    tool = Solver.ensureEquipped(objective.Id, 0.35)
+                    if not tool or tool.Parent ~= character then
+                        lastPickupStatus = "tool unequipped before interaction"
+                        break
+                    end
+                    handle = tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart", true)
+
                     beginAutomationMove(eventPart.CFrame + eventPart.CFrame.LookVector * -1.5 + Vector3.new(0, 1, 0))
-                    task.wait(0.025)
+                    task.wait(0.04)
                     automationDeadline = os.clock() + 2
 
                     local touchPart = handle
@@ -4632,7 +4662,9 @@ end)()
                         end)
                     end
 
-                    pcall(function() tool:Activate() end)
+                    if tool.Parent == character then
+                        pcall(function() tool:Activate() end)
+                    end
 
                     local click = eventPart:FindFirstChildWhichIsA("ClickDetector", true)
                     local prompt = eventPart:FindFirstChildWhichIsA("ProximityPrompt", true)
