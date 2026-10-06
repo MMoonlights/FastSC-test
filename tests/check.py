@@ -269,6 +269,12 @@ assert "escapeTouchOverride" in piggy
 assert "nearEscapeTrigger" in piggy
 assert "isEscapeRelatedPart" in piggy
 assert 'setCharacterTouch(false)' in piggy
+assert 'PreObjectives = {"RedGear", "GreenGear"}' in piggy
+assert 'gate.Synthetic' in piggy
+assert 'syntheticCompleted[dependency]' in piggy
+assert 'White Key spawned: collecting' not in piggy
+assert 'text:find("well", 1, true) then score -= 30' in piggy
+assert 'text:find("generator", 1, true) then score += 16' in piggy
 
 intercity = texts["games/piggy-intercity/script.lua"]
 for token in [
