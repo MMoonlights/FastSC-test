@@ -2,6 +2,9 @@ return function(ctx)
     local Module=assert(ctx.Module,"FastSC module loader is unavailable")
     local Core=Module("games/piggy/core.lua")
     local Solver=Module("games/piggy/solver.lua")
+    local SetupItems=Module("games/piggy/items.lua")
+    local SetupESP=Module("games/piggy/esp.lua")
+    local SetupPlayer=Module("games/piggy/player.lua")
 
     local core=Core.new(ctx)
     local solver=Solver.new(core)
@@ -74,18 +77,9 @@ return function(ctx)
         refresh()
     end)
 
-    itemsTab:CreateSection("Items")
-    itemsTab:CreateButton("Refresh item scanner",function()
-        core:Scan()
-        core.LastStatus="items rescanned"
-        refresh()
-    end)
-
-    espTab:CreateSection("ESP")
-    espTab:CreateLabel("ESP is being moved to the modular Piggy runtime.")
-
-    playerTab:CreateSection("Player")
-    playerTab:CreateLabel("Player utilities are being moved to the modular Piggy runtime.")
+    SetupItems(ctx,core,itemsTab)
+    SetupESP(ctx,core,espTab)
+    SetupPlayer(ctx,core,playerTab)
 
     scope:Connect(game:GetService("Players").LocalPlayer.CharacterAdded,function()
         task.wait(0.5)
