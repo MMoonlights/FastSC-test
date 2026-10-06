@@ -56,13 +56,20 @@ return function(ctx)
     tab:CreateToggle("Auto Object / Full run",false,function(value)
         running=value
         core.Running=value
+        core:SetFlight(value)
         if value then
             solver:ResetIfNeeded()
             scope:Loop("piggyFullRun",0.12,step)
         else
             scope:StopTask("piggyFullRun")
+            core:StopHold()
             core.Generation+=1
             busy=false
+            local character=game:GetService("Players").LocalPlayer.Character
+            local humanoid=character and character:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.GettingUp) end)
+            end
         end
         refresh()
     end)
@@ -84,6 +91,7 @@ return function(ctx)
         task.wait(0.5)
         solver.RoundMap=nil
         solver:ResetIfNeeded()
+        if running then core:SetFlight(true) end
         refresh()
     end)
 
