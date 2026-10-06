@@ -5116,7 +5116,9 @@ end)()
         if godMode then task.defer(applyGodMode) end
     end)
 
-    local function applyNoclip()
+    local Actions = {}
+
+    function Actions.applyNoclip()
         local character = localPlayer.Character
         if not character then return end
         for _, part in ipairs(character:GetDescendants()) do
@@ -5124,7 +5126,7 @@ end)()
         end
     end
 
-    local function restoreNoclip()
+    function Actions.restoreNoclip()
         local character = localPlayer.Character
         if not character then return end
         for _, part in ipairs(character:GetDescendants()) do
@@ -5132,7 +5134,7 @@ end)()
         end
     end
 
-    local function applyTrapBypass(value)
+    function Actions.applyTrapBypass(value)
         for trap in pairs(traps) do
             if trap.Parent then
                 if isEscapeRelatedPart(trap) then
@@ -5146,7 +5148,7 @@ end)()
         end
     end
 
-    local function applyDoors(value)
+    function Actions.applyDoors(value)
         for part in pairs(doors) do
             if part.Parent then
                 if value then
@@ -5160,7 +5162,7 @@ end)()
         end
     end
 
-    local function applyBotFreeze(value)
+    function Actions.applyBotFreeze(value)
         for bot in pairs(bots) do
             local root = getPart(bot)
             if root then
@@ -5173,7 +5175,7 @@ end)()
         end
     end
 
-    local function setupVisualTab(tab)
+    function Actions.setupVisualTab(tab)
         tab:CreateSection("ESP")
         tab:CreateToggle("Item ESP", false, function(value)
             itemEsp = value
@@ -5207,7 +5209,7 @@ end)()
         end)
     end
 
-    local function setupItemTab(tab)
+    function Actions.setupItemTab(tab)
         tab:CreateSection("Items")
         local names = itemNames()
         itemDropdown = tab:CreateDropdown("Item", names, names[1], function(value)
@@ -5233,7 +5235,7 @@ end)()
         end)
     end
 
-    local function setupObjectiveHelper(tab)
+    function Actions.setupObjectiveHelper(tab)
         tab:CreateSection("Objective Helper")
         objectiveMapLabel = tab:CreateLabel("Map: " .. currentMapName())
         objectiveCurrentLabel = tab:CreateLabel("Current objective: scanning...")
@@ -5270,7 +5272,7 @@ end)()
         refreshObjectiveState()
     end
 
-    local function setupPlayerTab(tab, rage)
+    function Actions.setupPlayerTab(tab, rage)
         tab:CreateSection("Movement")
         tab:CreateToggle("WalkSpeed", false, function(value)
             speedEnabled = value
@@ -5295,7 +5297,7 @@ end)()
         tab:CreateToggle("Infinite jump", false, function(value) infiniteJump = value end)
         tab:CreateToggle("Noclip", false, function(value)
             noclip = value
-            if value then applyNoclip() else restoreNoclip() end
+            if value then Actions.applyNoclip() else Actions.restoreNoclip() end
         end)
     end
 
@@ -5307,7 +5309,7 @@ end)()
 
         rage:CreateSection(bookName)
         rage:CreateLabel("Universe support: Book 1, Book 2 and extra Piggy places")
-        setupObjectiveHelper(rage)
+        Actions.setupObjectiveHelper(rage)
         rage:CreateToggle("Auto Object / Full run", false, function(value)
             autoComplete = value
             releaseAutomation()
@@ -5369,20 +5371,20 @@ end)()
         end)
         rage:CreateToggle("Trap bypass", false, function(value)
             trapBypass = value
-            applyTrapBypass(value)
+            Actions.applyTrapBypass(value)
         end)
         rage:CreateToggle("Remove doors locally", false, function(value)
             doorsRemoved = value
-            applyDoors(value)
+            Actions.applyDoors(value)
         end)
         rage:CreateToggle("Freeze Piggy / bots", false, function(value)
             botsFrozen = value
-            applyBotFreeze(value)
+            Actions.applyBotFreeze(value)
         end)
 
-        setupItemTab(itemsTab)
-        setupVisualTab(visualsTab)
-        setupPlayerTab(playerTab, true)
+        Actions.setupItemTab(itemsTab)
+        Actions.setupVisualTab(visualsTab)
+        Actions.setupPlayerTab(playerTab, true)
     else
         local main = ctx.Window:CreateTab("Legit", "L")
         local visualsTab = ctx.Window:CreateTab("ESP", "E")
@@ -5390,10 +5392,10 @@ end)()
 
         main:CreateSection(bookName)
         main:CreateLabel("Item names are resolved from Piggy mesh, color and metadata signatures")
-        setupObjectiveHelper(main)
-        setupItemTab(main)
-        setupVisualTab(visualsTab)
-        setupPlayerTab(playerTab, false)
+        Actions.setupObjectiveHelper(main)
+        Actions.setupItemTab(main)
+        Actions.setupVisualTab(visualsTab)
+        Actions.setupPlayerTab(playerTab, false)
     end
 
     scope:Connect(UserInputService.JumpRequest, function()
@@ -5416,14 +5418,14 @@ end)()
         local humanoid = character and character:FindFirstChildOfClass("Humanoid")
         if speedEnabled and humanoid then scope:Set(humanoid, "WalkSpeed", speedValue) end
         if jumpEnabled and humanoid then scope:Set(humanoid, "JumpPower", jumpValue) end
-        if noclip then applyNoclip() end
+        if noclip then Actions.applyNoclip() end
         if godMode then applyGodMode() end
     end)
 
     scope:Loop("rageRefresh", 0.5, function()
-        if trapBypass then applyTrapBypass(true) end
-        if doorsRemoved then applyDoors(true) end
-        if botsFrozen then applyBotFreeze(true) end
+        if trapBypass then Actions.applyTrapBypass(true) end
+        if doorsRemoved then Actions.applyDoors(true) end
+        if botsFrozen then Actions.applyBotFreeze(true) end
     end)
 
     scope:AddRestore(function()
@@ -5435,10 +5437,10 @@ end)()
         clearKind()
         setCharacterTouch(false)
         restoreEnemyTouchTransmitters()
-        restoreNoclip()
-        applyTrapBypass(false)
-        applyDoors(false)
-        applyBotFreeze(false)
+        Actions.restoreNoclip()
+        Actions.applyTrapBypass(false)
+        Actions.applyDoors(false)
+        Actions.applyBotFreeze(false)
         if fullbright then
             scope:Restore(Lighting, "Brightness")
             scope:Restore(Lighting, "GlobalShadows")
