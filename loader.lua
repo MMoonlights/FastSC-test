@@ -39,7 +39,10 @@ local function fetchUrl(url, key, ttl)
 end
 
 local function source(path)
-    if isfile and readfile and isfile(localPath(path)) then
+    -- Local repo files are opt-in for development only. Production/re-execute
+    -- always follows GitHub main so stale executor files cannot shadow fixes.
+    local useLocal = env.FastSCDevLocal == true
+    if useLocal and isfile and readfile and isfile(localPath(path)) then
         return readfile(localPath(path))
     end
 
