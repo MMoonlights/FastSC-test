@@ -54,6 +54,8 @@ finishedEscapePart = nil
 escapeAttempts = 0
 lastEscapeAttempt = 0
 pickupBusy = false
+pickupRetryAt = {}
+pickupFailuresById = {}
 objectiveCooldowns = setmetatable({}, {__mode = "k"})
 objectiveFailures = setmetatable({}, {__mode = "k"})
 disabledEnemyTouches = setmetatable({}, {__mode = "k"})
@@ -334,9 +336,10 @@ scope:Connect(RunService.PreSimulation, function()
     if not automationActive then return end
     local now = os.clock()
     if automationDeadline > 0 and now > automationDeadline then
+        -- Movement timeout only releases the CFrame lock. The active solver/pickup
+        -- coroutine owns its busy flags and must be the only code allowed to clear
+        -- them, otherwise a slow server confirmation can overlap another pass.
         endAutomationMove()
-        pickupBusy = false
-        autoCompleteBusy = false
         return
     end
     if not root or not automationTarget then return end
