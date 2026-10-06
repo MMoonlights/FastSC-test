@@ -631,10 +631,11 @@ return function(ctx)
         },
         Refinery = {
             Gates = {
+                Screwdriver = {Active = {"SmokeGrenade", "RedKey"}},
                 WhiteKey = {Active = {"PurpleKey"}},
             },
             Depends = {
-                Screwdriver = {"RedKey"},
+                Screwdriver = {"RedKey", "SmokeGrenade"},
                 WhiteKey = {"PurpleKey", "OrangeKey", "Scissors", "GreenKey", "Carrot"},
             },
             Priority = {
