@@ -387,6 +387,11 @@ function isAvailableWorldItem(item)
         for _, dependency in ipairs(gate.Active or {}) do
             if requirementExists(dependency) then return false end
         end
+        for _, dependency in ipairs(gate.Synthetic or {}) do
+            if not syntheticCompleted or not syntheticCompleted[dependency] then
+                return false
+            end
+        end
     end
 
     if ancestorRequirementLocks(item) then
