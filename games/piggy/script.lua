@@ -203,6 +203,7 @@ return function(ctx)
     local automationActive = false
     local automationTarget
     local automationDeadline = 0
+    local automationGeneration = 0
 
     local function zeroCharacterVelocity(character)
         if not character then return end
@@ -257,9 +258,19 @@ return function(ctx)
     end
 
     local function releaseAutomation()
+        automationGeneration += 1
         autoCompleteBusy = false
         pickupBusy = false
         endAutomationMove()
+
+        local character = localPlayer.Character
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid.Jump = false
+            scope:Restore(humanoid, "AutoRotate")
+        end
+        if not noclip then setAutomationCollision(false) end
+        zeroCharacterVelocity(character)
     end
 
     scope:Connect(RunService.PreSimulation, function()
@@ -1998,12 +2009,18 @@ return function(ctx)
         end
 
         pickupBusy = true
+        local runGeneration = automationGeneration
         local root = Common.Root()
         local old = root.CFrame
+
+        local function cancelled()
+            return runGeneration ~= automationGeneration
+        end
 
         local function confirm(timeout)
             local deadline = os.clock() + timeout
             repeat
+                if cancelled() then return nil end
                 if expectedId and findOwnedById then
                     local ownedTool = findOwnedById(expectedId)
                     if ownedTool then return ownedTool end
@@ -2015,6 +2032,7 @@ return function(ctx)
         local owned
         local success = pcall(function()
             for attempt = 1, 2 do
+                if cancelled() then break end
                 part = getPart(item)
                 if not part then break end
                 local target = part.CFrame + Vector3.new(0, 2.5, 0)
@@ -2037,8 +2055,8 @@ return function(ctx)
             end
         end)
 
-        endAutomationMove()
-        if returnAfter or not owned then
+        if not cancelled() then endAutomationMove() end
+        if (returnAfter or not owned) and not cancelled() then
             if root and root.Parent then
                 root.CFrame = old
                 root.AssemblyLinearVelocity = Vector3.zero
@@ -2047,6 +2065,11 @@ return function(ctx)
         end
 
         pickupBusy = false
+
+        if cancelled() then
+            lastPickupStatus = "cancelled"
+            return false
+        end
 
         if not success then
             lastPickupStatus = "pickup handler failed"
@@ -2236,7 +2259,7 @@ return function(ctx)
         return table.concat(chunks, " ")
     end
 
-    local solveCodePanel, solveSpecialPuzzle, getPuzzleStatus = (function()
+    local solveCodePanel, solveSpecialPuzzle, getPuzzleStatus, progressFingerprint = (function()
     local puzzleBusy = false
     local puzzleStatus = "idle"
     local puzzleRetryAt = 0
@@ -3896,7 +3919,7 @@ return function(ctx)
 
     return solveCodePanel, solveSpecialPuzzle, function()
         return puzzleStatus
-    end
+    end, progressFingerprint
 end)()
     local function isFreeProgressInteraction(interactive)
         if not interactive or not interactive.Parent then return false end
@@ -4359,9 +4382,10 @@ end)()
 
         local ok = pcall(function()
             for _ = 1, 4 do
-                if not objectiveStillActive(objective) then break end
+                if not autoComplete or not objectiveStillActive(objective) then break end
 
                 for _, eventPart in ipairs(eventParts) do
+                    if not autoComplete then break end
                     if not objectiveStillActive(objective) then break end
                     if not eventPart.Parent then continue end
 
@@ -4836,10 +4860,10 @@ end)()
     end
 
     if mode == "Rage" then
-        local rage = ctx.Window:CreateTab("Rage", "R")
-        local itemsTab = ctx.Window:CreateTab("Items", "I")
-        local visualsTab = ctx.Window:CreateTab("ESP", "E")
-        local playerTab = ctx.Window:CreateTab("Player", "P")
+        local rage = ctx.Window:CreateTab("Rage")
+        local itemsTab = ctx.Window:CreateTab("Items")
+        local visualsTab = ctx.Window:CreateTab("ESP")
+        local playerTab = ctx.Window:CreateTab("Player")
 
         rage:CreateSection(bookName)
         rage:CreateLabel("Universe support: Book 1, Book 2 and extra Piggy places")
