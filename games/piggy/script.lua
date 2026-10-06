@@ -50,6 +50,7 @@ return function(ctx)
     local objectiveVisualTarget
     local autoCompleteBusy = false
     local runFinished = false
+    local finishedMapInstance
     local escapeAttempts = 0
     local lastEscapeAttempt = 0
     local pickupBusy = false
@@ -4787,21 +4788,19 @@ end)()
     local function finishRun(reason)
         if runFinished then return end
         runFinished = true
-        autoComplete = false
+        finishedMapInstance = currentMapModel()
         autoCompleteBusy = false
         pickupBusy = false
-        scope:StopTask("autoComplete")
         releaseAutomation()
         clearKind("Objective")
         objectiveVisualTarget = nil
         currentObjective = nil
         escapeTouchOverride = false
         setCharacterTouch(true)
-        moveAwayFromPiggy()
 
-        if objectiveCurrentLabel then objectiveCurrentLabel:Set("Current objective: completed") end
+        if objectiveCurrentLabel then objectiveCurrentLabel:Set("Current objective: waiting for next round") end
         if objectiveNeededLabel then objectiveNeededLabel:Set("Items needed: none") end
-        if objectiveStatusLabel then objectiveStatusLabel:Set("Status: run completed" .. (reason and " | " .. reason or "")) end
+        if objectiveStatusLabel then objectiveStatusLabel:Set("Status: round completed" .. (reason and " | " .. reason or "")) end
     end
 
     local function exitRequirementActive()
@@ -4897,8 +4896,42 @@ end)()
         return true
     end
 
+    local function resetRoundAutomation()
+        runFinished = false
+        finishedMapInstance = nil
+        escapeAttempts = 0
+        lastEscapeAttempt = 0
+        syntheticCompleted = {}
+        objectiveFailures = setmetatable({}, {__mode = "k"})
+        objectiveCooldowns = setmetatable({}, {__mode = "k"})
+        freeInteractionCooldowns = setmetatable({}, {__mode = "k"})
+        solvedPuzzles = {}
+        currentObjective = nil
+        objectiveVisualTarget = nil
+        itemUiDirty = true
+        clearKind("Objective")
+        releaseAutomation()
+    end
+
+    local function updateRoundState()
+        if not runFinished then return end
+        local map = currentMapModel()
+
+        -- Stay completely idle while the completed map is still the active instance.
+        if map and map == finishedMapInstance and map.Parent then return end
+
+        -- A different map instance means a fresh round. Keep Full Run enabled.
+        if map and map ~= finishedMapInstance then
+            resetRoundAutomation()
+        end
+    end
+
     local function autoCompleteStep()
-        if runFinished or not autoComplete then return end
+        if not autoComplete then return end
+        if runFinished then
+            updateRoundState()
+            return
+        end
         if autoCompleteBusy then return end
         autoCompleteBusy = true
 
@@ -5259,9 +5292,7 @@ end)()
             autoComplete = value
             releaseAutomation()
             if value then
-                runFinished = false
-                escapeAttempts = 0
-                lastEscapeAttempt = 0
+                resetRoundAutomation()
                 autoGrab = false
                 autoInteract = false
                 scope:StopTask("autoGrab")
