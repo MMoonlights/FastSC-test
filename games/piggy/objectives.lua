@@ -178,11 +178,14 @@ function Synth.syntheticTarget(id)
             if part then
                 local text = string.lower(object.Name)
                 local score = 0
-                if text:find("gear", 1, true) then score += 12 end
-                if text:find("well", 1, true) then score += 10 end
-                if text:find("machine", 1, true) then score += 4 end
+                if text:find("gear", 1, true) then score += 24 end
+                if text:find("generator", 1, true) then score += 16 end
+                if text:find("gearbox", 1, true) then score += 28 end
+                if text:find("machine", 1, true) then score += 8 end
+                if text:find("shed", 1, true) then score += 8 end
                 if text:find("event", 1, true) then score += 3 end
-                if text:find("water", 1, true) then score += 3 end
+                if text:find("well", 1, true) then score -= 30 end
+                if text:find("bucket", 1, true) then score -= 20 end
                 if requirementEventMesh(object) then score += 8 end
                 if object:FindFirstChildWhichIsA("ClickDetector", true)
                     or object:FindFirstChildWhichIsA("ProximityPrompt", true)
@@ -193,7 +196,7 @@ function Synth.syntheticTarget(id)
                 local required = object:FindFirstChild("ToolRequired", true)
                 if required and required:IsA("StringValue") then
                     local requiredId = idFromText(required.Value)
-                    if requiredId == id then score += 20 end
+                    if requiredId == id then score += 60 end
                 end
 
                 if score > bestScore then
@@ -245,31 +248,7 @@ function Synth.syntheticObjective(id, parentId)
 end
 
 function Synth.reconcileSyntheticState()
-    local mapName = currentMapName()
-    if mapName ~= "House" then return end
-
-    -- In House the White Key is the output of the well/gear mechanism.
-    -- Once it exists as a real world pickup, both gear stages are complete,
-    -- regardless of whether Piggy removed/renamed the individual gear events.
-    local whiteKey = findItemById and findItemById("WhiteKey")
-    if whiteKey and isWorldItem(whiteKey) then
-        syntheticCompleted.RedGear = true
-        syntheticCompleted.GreenGear = true
-        return
-    end
-
-    -- If a gear no longer exists anywhere and is no longer owned after it
-    -- was previously available, treat its placement as complete.
-    for _, id in ipairs({"RedGear", "GreenGear"}) do
-        if not syntheticCompleted[id] then
-            local owned = findOwnedById and findOwnedById(id)
-            local world = findItemById and findItemById(id)
-            if not owned and not world and not requirementExists(id) then
-                -- Do not mark it from absence alone at map start; only the
-                -- WhiteKey output above is authoritative.
-            end
-        end
-    end
+    if currentMapName() ~= "House" then return end
 end
 
 function Solver.collectObjectives()
@@ -301,6 +280,26 @@ function Solver.collectObjectives()
     end
 
     local profile = mapProfiles[currentMapName()]
+    if profile and profile.PreObjectives then
+        for _, dependency in ipairs(profile.PreObjectives) do
+            if not syntheticCompleted[dependency] then
+                local alreadyActive = false
+                for _, existing in ipairs(result) do
+                    if existing.Id == dependency then
+                        alreadyActive = true
+                        break
+                    end
+                end
+                if not alreadyActive then
+                    local synthetic = Synth.syntheticObjective(dependency, "Map")
+                    if synthetic and synthetic.Part then
+                        result[#result + 1] = synthetic
+                    end
+                end
+            end
+        end
+    end
+
     if profile and profile.Synthetic then
         local snapshot = {}
         for _, objective in ipairs(result) do snapshot[#snapshot + 1] = objective end
@@ -998,25 +997,6 @@ function Round.autoCompleteStep()
     autoCompleteBusy = true
 
     local ok, errorMessage = pcall(function()
-        if currentMapName() == "House" then
-            local ownedWhite = findOwnedById and findOwnedById("WhiteKey")
-            local worldWhite = findItemById and findItemById("WhiteKey")
-            if worldWhite and not ownedWhite then
-                syntheticCompleted.RedGear = true
-                syntheticCompleted.GreenGear = true
-                lastPickupStatus = "White Key spawned: collecting"
-                local picked = grabItem(worldWhite, false, "WhiteKey")
-                if picked then
-                    lastPickupStatus = "White Key collected"
-                end
-                Solver.refreshObjectiveState()
-                return
-            elseif ownedWhite then
-                syntheticCompleted.RedGear = true
-                syntheticCompleted.GreenGear = true
-            end
-        end
-
         local objectives, objective = Solver.refreshObjectiveState()
 
         local profile = mapProfiles[currentMapName()]
