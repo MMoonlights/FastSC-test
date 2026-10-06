@@ -9,84 +9,109 @@ return function(ctx)
     local core=Core.new(ctx)
     local solver=Solver.new(core)
     local scope=ctx.Scope
+    local running=false
+    local busy=false
 
-    local tab=ctx.Window:CreateTab("Rage")
+    local rage=ctx.Window:CreateTab("Rage")
     local itemsTab=ctx.Window:CreateTab("Items")
     local espTab=ctx.Window:CreateTab("ESP")
     local playerTab=ctx.Window:CreateTab("Player")
 
-    tab:CreateSection("Piggy")
-    tab:CreateLabel("Book 1, Book 2 and extra Piggy places")
-
-    local mapLabel=tab:CreateLabel("Map: scanning...")
-    local objectiveLabel=tab:CreateLabel("Objective: scanning...")
-    local statusLabel=tab:CreateLabel("Status: idle")
-
-    local running=false
-    local busy=false
+    rage:CreateSection("Piggy")
+    rage:CreateLabel("Book 1, Book 2 and extra Piggy places")
+    local mapLabel=rage:CreateLabel("Map: scanning...")
+    local objectiveLabel=rage:CreateLabel("Objective: scanning...")
+    local statusLabel=rage:CreateLabel("Status: idle")
 
     local function refresh()
-        core:Scan()
-        local req,list=solver:Select()
-        mapLabel:Set("Map: "..tostring(core.MapName).." | active objectives: "..tostring(#(list or {})))
-        if req then
-            objectiveLabel:Set("Objective: "..core:Display(req.Id))
-        elseif core.MapName=="House" and not solver:HouseWhiteKeyExists() then
-            if not solver.HouseGears.RedGear then objectiveLabel:Set("Objective: Red Gear -> well")
-            elseif not solver.HouseGears.GreenGear then objectiveLabel:Set("Objective: Green Gear -> well")
-            else objectiveLabel:Set("Objective: waiting for White Key") end
-        else
-            objectiveLabel:Set("Objective: none")
-        end
-        statusLabel:Set("Status: "..tostring(core.LastStatus or "idle"))
+        local ok,err=pcall(function()
+            core:Scan()
+            local req,list=solver:Select()
+            mapLabel:Set("Map: "..tostring(core.MapName).." | active: "..tostring(#(list or {})))
+            if req then
+                objectiveLabel:Set("Objective: "..core:Display(req.Id))
+            elseif core.MapName=="House" and not solver:HouseWhiteKeyExists() then
+                if not solver.HouseGears.RedGear and (core:Owned("RedGear") or core:FindItem("RedGear")) then
+                    objectiveLabel:Set("Objective: Red Gear -> well")
+                elseif not solver.HouseGears.GreenGear and (core:Owned("GreenGear") or core:FindItem("GreenGear")) then
+                    objectiveLabel:Set("Objective: Green Gear -> well")
+                else
+                    objectiveLabel:Set("Objective: waiting for progression")
+                end
+            else
+                objectiveLabel:Set("Objective: none")
+            end
+            statusLabel:Set("Status: "..tostring(core.LastStatus or "idle"))
+        end)
+        if not ok then statusLabel:Set("Status: scanner error: "..tostring(err)) end
     end
 
     local function step()
         if not running or busy then return end
         busy=true
         local ok,result=pcall(function() return solver:Step() end)
-        if ok then
-            core.LastStatus=result or core.LastStatus
-        else
-            core.LastStatus="solver error: "..tostring(result)
-        end
-        refresh()
+        if ok then core.LastStatus=result or core.LastStatus
+        else core.LastStatus="solver error: "..tostring(result) end
         busy=false
+        refresh()
     end
 
-    tab:CreateButton("Refresh objectives",refresh)
-    tab:CreateButton("Complete one objective pass",step)
-    tab:CreateToggle("Auto Object / Full run",false,function(value)
+    rage:CreateButton("Refresh objectives",refresh)
+    rage:CreateButton("Complete one objective pass",function()
+        if not running then
+            running=true
+            core.Running=true
+            core:SetFlight(true)
+            step()
+            running=false
+            core.Running=false
+            core:ResetMotion()
+        else
+            step()
+        end
+    end)
+
+    rage:CreateToggle("Auto Object / Full run",false,function(value)
         running=value
         core.Running=value
-        core:SetFlight(value)
+        busy=false
         if value then
             solver:ResetIfNeeded()
+            core:SetFlight(true)
             scope:Loop("piggyFullRun",0.12,step)
         else
             scope:StopTask("piggyFullRun")
-            core:StopHold()
             core.Generation+=1
-            busy=false
-            local character=game:GetService("Players").LocalPlayer.Character
-            local humanoid=character and character:FindFirstChildOfClass("Humanoid")
-            if humanoid then
-                pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.GettingUp) end)
-            end
+            core:ResetMotion()
         end
         refresh()
     end)
 
-    SetupItems(ctx,core,itemsTab)
-    SetupESP(ctx,core,espTab)
-    SetupPlayer(ctx,core,playerTab)
+    local function setup(name,fn,...)
+        local ok,err=pcall(fn,...)
+        if not ok then
+            core.LastStatus=name.." module error: "..tostring(err)
+            statusLabel:Set("Status: "..core.LastStatus)
+        end
+    end
 
-    scope:Connect(game:GetService("Players").LocalPlayer.CharacterAdded,function()
-        task.wait(0.5)
+    setup("Items",SetupItems,ctx,core,itemsTab)
+    setup("ESP",SetupESP,ctx,core,espTab)
+    setup("Player",SetupPlayer,ctx,core,playerTab)
+
+    scope:Connect(core.Player.CharacterAdded,function()
+        task.wait(0.4)
         solver.RoundMap=nil
         solver:ResetIfNeeded()
         if running then core:SetFlight(true) end
         refresh()
+    end)
+
+    scope:AddRestore(function()
+        running=false
+        busy=false
+        core.Running=false
+        core:ResetMotion()
     end)
 
     refresh()
