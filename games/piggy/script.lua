@@ -3302,6 +3302,7 @@ end)()
 
         if not best or not bestPart then return false end
 
+        local before = progressFingerprint()
         beginAutomationMove(bestPart.CFrame + bestPart.CFrame.LookVector * -2 + Vector3.new(0, 1.5, 0))
         task.wait(0.025)
         local host = interactionHost(best)
@@ -3313,8 +3314,9 @@ end)()
                 pcall(fireproximityprompt, best)
             end
         end
-        freeInteractionCooldowns[best] = os.clock() + 0.8
         task.wait(0.06)
+        local progressed = solved or progressFingerprint() ~= before
+        freeInteractionCooldowns[best] = os.clock() + (progressed and 0.18 or 2.5)
         endAutomationMove()
         return true
     end
