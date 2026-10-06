@@ -3,18 +3,22 @@ return function(ctx,core,tab)
     local Lighting=game:GetService("Lighting")
     local scope=ctx.Scope
     local visuals={}
-    local itemEsp=false
-    local playerEsp=false
-    local piggyEsp=false
+    local enabled={Item=false,Piggy=false,Player=false}
+
+    local function destroyVisual(key)
+        local v=visuals[key]
+        if not v then return end
+        if v.Highlight then pcall(function() v.Highlight:Destroy() end) end
+        if v.Billboard then pcall(function() v.Billboard:Destroy() end) end
+        visuals[key]=nil
+    end
 
     local function clear(kind)
+        local keys={}
         for key,v in pairs(visuals) do
-            if not kind or v.Kind==kind then
-                if v.Highlight then pcall(function() v.Highlight:Destroy() end) end
-                if v.Billboard then pcall(function() v.Billboard:Destroy() end) end
-                visuals[key]=nil
-            end
+            if not kind or v.Kind==kind then keys[#keys+1]=key end
         end
+        for _,key in ipairs(keys) do destroyVisual(key) end
     end
 
     local function add(key,adornee,text,kind)
@@ -26,9 +30,10 @@ return function(ctx,core,tab)
         h.OutlineTransparency=0
         h.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop
         h.Parent=adornee
+        scope:TrackInstance(h)
 
-        local part=core:GetPart(adornee)
         local b
+        local part=core:GetPart(adornee)
         if part then
             b=Instance.new("BillboardGui")
             b.Name="FastSCLabel"
@@ -45,12 +50,13 @@ return function(ctx,core,tab)
             label.Font=Enum.Font.GothamBold
             label.Parent=b
             b.Parent=part
+            scope:TrackInstance(b)
         end
         visuals[key]={Highlight=h,Billboard=b,Kind=kind}
     end
 
     local function refresh()
-        if itemEsp then
+        if enabled.Item then
             core:Scan()
             for id,bucket in pairs(core.Items) do
                 for item in pairs(bucket) do
@@ -58,36 +64,40 @@ return function(ctx,core,tab)
                 end
             end
         end
-        if playerEsp then
+
+        if enabled.Player then
             for _,p in ipairs(Players:GetPlayers()) do
                 if p~=core.Player and p.Character then add(p,p.Character,p.Name,"Player") end
             end
         end
-        if piggyEsp then
-            for _,obj in ipairs(workspace:GetChildren()) do
+
+        if enabled.Piggy then
+            for _,obj in ipairs(workspace:GetDescendants()) do
                 if obj:IsA("Model") and obj~=core.Player.Character then
                     local n=string.lower(obj.Name)
                     if n:find("piggy",1,true) or n:find("bot",1,true) then
-                        add(obj,obj,obj.Name,"Piggy")
+                        if obj:FindFirstChildOfClass("Humanoid") then add(obj,obj,obj.Name,"Piggy") end
                     end
                 end
             end
         end
-        for key,v in pairs(visuals) do
-            local alive=typeof(key)=="Instance" and key.Parent~=nil
-            if typeof(key)=="Instance" and key:IsA("Player") then alive=key.Parent~=nil and key.Character~=nil end
-            if not alive then
-                if v.Highlight then pcall(function() v.Highlight:Destroy() end) end
-                if v.Billboard then pcall(function() v.Billboard:Destroy() end) end
-                visuals[key]=nil
+
+        local dead={}
+        for key in pairs(visuals) do
+            local alive=false
+            if typeof(key)=="Instance" then
+                if key:IsA("Player") then alive=key.Parent~=nil and key.Character~=nil
+                else alive=key.Parent~=nil end
             end
+            if not alive then dead[#dead+1]=key end
         end
+        for _,key in ipairs(dead) do destroyVisual(key) end
     end
 
     tab:CreateSection("ESP")
-    tab:CreateToggle("Item ESP",false,function(v) itemEsp=v if not v then clear("Item") else refresh() end end)
-    tab:CreateToggle("Piggy / Bot ESP",false,function(v) piggyEsp=v if not v then clear("Piggy") else refresh() end end)
-    tab:CreateToggle("Player ESP",false,function(v) playerEsp=v if not v then clear("Player") else refresh() end end)
+    tab:CreateToggle("Item ESP",false,function(v) enabled.Item=v if not v then clear("Item") else refresh() end end)
+    tab:CreateToggle("Piggy / Bot ESP",false,function(v) enabled.Piggy=v if not v then clear("Piggy") else refresh() end end)
+    tab:CreateToggle("Player ESP",false,function(v) enabled.Player=v if not v then clear("Player") else refresh() end end)
     tab:CreateToggle("Fullbright",false,function(v)
         if v then
             scope:Set(Lighting,"Brightness",4)
@@ -103,5 +113,5 @@ return function(ctx,core,tab)
     end)
 
     scope:Loop("piggyEspRefresh",0.35,refresh)
-    scope:Add(function() clear() end)
+    scope:AddRestore(function() clear() end)
 end
