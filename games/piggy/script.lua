@@ -1224,17 +1224,25 @@ return function(ctx)
     end
 
     local function ancestorRequirementLocks(item)
+        local map = currentMapModel()
         local current = item.Parent
-        for _ = 1, 5 do
-            if not current or current == workspace then break end
+        for _ = 1, 6 do
+            if not current or current == workspace or current == map then break end
+
             for _, child in ipairs(current:GetChildren()) do
                 if child:IsA("StringValue") then
                     local id = aliases[token(child.Value)]
-                    if id and requirementExists(id) then
-                        return true
-                    end
+                    if id and requirementExists(id) then return true end
                 end
             end
+
+            for value in pairs(requirements) do
+                if value.Parent and value:IsDescendantOf(current) and isObjectiveRequirement(value) then
+                    local id = aliases[token(value.Value)]
+                    if id and requirementExists(id) then return true end
+                end
+            end
+
             current = current.Parent
         end
         return false
