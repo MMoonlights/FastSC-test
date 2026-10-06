@@ -4102,11 +4102,17 @@ end)()
                 if part then
                     local text = string.lower(object.Name)
                     local score = 0
-                    if text:find("gear", 1, true) then score += 8 end
-                    if text:find("well", 1, true) then score += 6 end
-                    if text:find("machine", 1, true) then score += 3 end
-                    if text:find("event", 1, true) then score += 2 end
-                    if requirementEventMesh(object) then score += 7 end
+                    if text:find("gear", 1, true) then score += 12 end
+                    if text:find("well", 1, true) then score += 10 end
+                    if text:find("machine", 1, true) then score += 4 end
+                    if text:find("event", 1, true) then score += 3 end
+                    if text:find("water", 1, true) then score += 3 end
+                    if requirementEventMesh(object) then score += 8 end
+                    if object:FindFirstChildWhichIsA("ClickDetector", true)
+                        or object:FindFirstChildWhichIsA("ProximityPrompt", true)
+                        or object:FindFirstChildWhichIsA("TouchTransmitter", true) then
+                        score += 4
+                    end
 
                     local required = object:FindFirstChild("ToolRequired", true)
                     if required and required:IsA("StringValue") then
@@ -4476,9 +4482,40 @@ end)()
                 end
             end
             add(getPart(target))
+
+            if objective.Synthetic then
+                local parent = target.Parent
+                if parent and parent ~= workspace then
+                    for _, sibling in ipairs(parent:GetChildren()) do
+                        if sibling:IsA("BasePart") then
+                            local hasInteraction = sibling:FindFirstChildWhichIsA("ClickDetector", true)
+                                or sibling:FindFirstChildWhichIsA("ProximityPrompt", true)
+                                or sibling:FindFirstChildWhichIsA("TouchTransmitter", true)
+                            if hasInteraction or requirementEventMesh(sibling) then add(sibling) end
+                        elseif sibling:IsA("Model") then
+                            for _, part in ipairs(sibling:GetDescendants()) do
+                                if part:IsA("BasePart") then
+                                    local hasInteraction = part:FindFirstChildWhichIsA("ClickDetector", true)
+                                        or part:FindFirstChildWhichIsA("ProximityPrompt", true)
+                                        or part:FindFirstChildWhichIsA("TouchTransmitter", true)
+                                    if hasInteraction or requirementEventMesh(part) then add(part) end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
         end
 
         return result
+    end
+
+    local function objectiveNeedsActivation(objective)
+        if not objective then return false end
+        if objective.Synthetic then
+            return not syntheticCompleted[objective.Id]
+        end
+        return objectiveStillActive(objective)
     end
 
     local function activateObjective(objective)
@@ -4503,11 +4540,11 @@ end)()
 
         local ok = pcall(function()
             for _ = 1, 4 do
-                if not autoComplete or not objectiveStillActive(objective) then break end
+                if not autoComplete or not objectiveNeedsActivation(objective) then break end
 
                 for _, eventPart in ipairs(eventParts) do
                     if not autoComplete then break end
-                    if not objectiveStillActive(objective) then break end
+                    if not objectiveNeedsActivation(objective) then break end
                     if not eventPart.Parent then continue end
 
                     beginAutomationMove(eventPart.CFrame + eventPart.CFrame.LookVector * -1.5 + Vector3.new(0, 1, 0))
