@@ -415,7 +415,7 @@ return function(ctx)
                 WhiteKey = {Active = {"YellowKey"}},
             },
             Depends = {
-                WhiteKey = {"YellowKey"},
+                WhiteKey = {"YellowKey", "RedKey"},
                 Gas = {"Battery"},
             },
             Counters = {
@@ -644,13 +644,18 @@ return function(ctx)
         },
         SafePlace = {
             Gates = {
-                Blowtorch = {Active = {"PurpleKey"}},
-                WhiteKey = {Active = {"YellowKey"}},
+                Hammer = {Active = {"BlueKey"}},
+                FireExtinguisher = {Active = {"Hammer"}},
+                Blowtorch = {Active = {"PurpleKey", "FireExtinguisher"}},
+                YellowKey = {Active = {"ElevatorKey"}},
+                WhiteKey = {Active = {"YellowKey", "RedKey"}},
             },
             Depends = {
+                Hammer = {"BlueKey"},
+                FireExtinguisher = {"Hammer"},
                 YellowKey = {"ElevatorKey"},
                 Blowtorch = {"PurpleKey", "FireExtinguisher", "Screwdriver", "Ladder"},
-                WhiteKey = {"YellowKey"},
+                WhiteKey = {"YellowKey", "RedKey"},
             },
             Priority = {
                 Screwdriver = 10, Ladder = 15, OrangeKey = 18, GreenKey = 20, RedKey = 22,
