@@ -185,7 +185,28 @@ function Core:HoldAt(cf,duration)
     stabilize()
 end
 
+function Core:SafeCFrame(cf)
+    local char=self.Player.Character
+    if not char then return cf end
+
+    local params=RaycastParams.new()
+    params.FilterType=Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances={char}
+    params.IgnoreWater=false
+
+    local origin=cf.Position+Vector3.new(0,5,0)
+    local hit=workspace:Raycast(origin,Vector3.new(0,-14,0),params)
+    if not hit then return cf end
+
+    local pos=Vector3.new(cf.Position.X,hit.Position.Y+3.1,cf.Position.Z)
+    local look=cf.LookVector
+    look=Vector3.new(look.X,0,look.Z)
+    if look.Magnitude<0.01 then look=Vector3.new(0,0,-1) else look=look.Unit end
+    return CFrame.new(pos,pos+look)
+end
+
 function Core:MoveTo(cf,holdDuration)
+    cf=self:SafeCFrame(cf)
     local char=self.Player.Character
     local root=char and char:FindFirstChild("HumanoidRootPart")
     if not root then return false end
