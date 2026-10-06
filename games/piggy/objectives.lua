@@ -176,7 +176,7 @@ function Synth.syntheticTarget(id)
         if object:IsA("Model") or object:IsA("BasePart") then
             local part = getPart(object)
             if part then
-                local text = string.lower(object.Name)
+                local text = ancestorText and ancestorText(object, 6) or string.lower(object.Name)
                 local score = 0
                 if text:find("gear", 1, true) then score += 24 end
                 if text:find("generator", 1, true) then score += 16 end
