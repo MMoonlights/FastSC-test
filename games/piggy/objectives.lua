@@ -166,6 +166,78 @@ end
 Synth = {}
 syntheticCompleted = {}
 
+function Synth.isGearId(id)
+    return id == "RedGear" or id == "GreenGear" or id == "WhiteGear" or id == "Gear"
+end
+
+function Synth.syntheticUsePart(id, target)
+    local map = currentMapModel()
+    if not map or not Synth.isGearId(id) then
+        return target and getPart(target) or nil
+    end
+
+    local targetPart = target and getPart(target) or nil
+    local best
+    local bestScore = -math.huge
+    local bestName = nil
+
+    local function scorePart(part)
+        if not part or not part:IsA("BasePart") or not part.Parent then return end
+        if belongsToItem(part) or itemObjectFrom(part) then return end
+
+        local score = 0
+        local text = ancestorText and ancestorText(part, 7) or string.lower(part.Name)
+
+        local required = part:FindFirstChild("ToolRequired", true)
+        if required and required:IsA("StringValue") and idFromText(required.Value) == id then
+            score += 1200
+        end
+
+        if text:find("gearbox", 1, true) then score += 360 end
+        if text:find("gear", 1, true) then score += 260 end
+        if text:find("generator", 1, true) then score += 220 end
+        if text:find("machine", 1, true) then score += 100 end
+        if text:find("shed", 1, true) then score += 80 end
+        if text:find("well", 1, true) then score -= 400 end
+        if text:find("bucket", 1, true) then score -= 300 end
+
+        if requirementEventMesh(part) then score += 180 end
+        if part:FindFirstChildWhichIsA("ClickDetector", true)
+            or part:FindFirstChildWhichIsA("ProximityPrompt", true)
+            or part:FindFirstChildWhichIsA("TouchTransmitter", true) then
+            score += 140
+        end
+
+        if target and (part == targetPart or part:IsDescendantOf(target)) then
+            score += 240
+        end
+
+        local fullName = tostring(part:GetFullName())
+        if score > bestScore or (score == bestScore and (not bestName or fullName < bestName)) then
+            best = part
+            bestScore = score
+            bestName = fullName
+        end
+    end
+
+    if target then
+        if target:IsA("BasePart") then scorePart(target) end
+        for _, descendant in ipairs(target:GetDescendants()) do
+            if descendant:IsA("BasePart") then scorePart(descendant) end
+        end
+    end
+
+    if not best or bestScore < 300 then
+        for _, descendant in ipairs(map:GetDescendants()) do
+            if descendant:IsA("BasePart") then
+                scorePart(descendant)
+            end
+        end
+    end
+
+    return best or targetPart
+end
+
 function Synth.syntheticTarget(id)
     local map = currentMapModel()
     if not map then return nil end
@@ -227,6 +299,7 @@ function Synth.syntheticObjective(id, parentId)
             ItemName = displayNames[id] or id,
             Target = item or currentMapModel(),
             Part = itemPart or (currentMapModel() and getPart(currentMapModel())),
+            UsePart = nil,
             TargetName = owned or worldItem and "Gear mechanism" or "Waiting for gear / mechanism",
             Requirement = nil,
             Synthetic = true,
@@ -235,11 +308,13 @@ function Synth.syntheticObjective(id, parentId)
         }
     end
 
+    local usePart = Synth.syntheticUsePart(id, target) or part
     return {
         Id = id,
         ItemName = displayNames[id] or id,
         Target = target,
-        Part = part,
+        Part = usePart,
+        UsePart = usePart,
         TargetName = Solver.readableTargetName(id, target),
         Requirement = nil,
         Synthetic = true,
@@ -590,6 +665,19 @@ function Solver.objectiveEventParts(objective)
         result[#result + 1] = part
     end
 
+    -- Synthetic House gears now resolve one exact mechanism part. Do not walk
+    -- sibling models: that was the source of the seemingly random teleports.
+    if objective and objective.Synthetic and Synth.isGearId(objective.Id) then
+        local precise = objective.UsePart
+        if not precise or not precise.Parent then
+            precise = Synth.syntheticUsePart(objective.Id, objective.Target)
+            objective.UsePart = precise
+            objective.Part = precise or objective.Part
+        end
+        add(precise or objective.Part or getPart(objective.Target))
+        return result
+    end
+
     local requirement = objective and objective.Requirement
     if requirement and requirement.Parent then
         if requirement.Parent:IsA("BasePart") then
@@ -614,34 +702,10 @@ function Solver.objectiveEventParts(objective)
             end
         end
         add(getPart(target))
-
-        if objective.Synthetic then
-            local parent = target.Parent
-            if parent and parent ~= workspace then
-                for _, sibling in ipairs(parent:GetChildren()) do
-                    if sibling:IsA("BasePart") then
-                        local hasInteraction = sibling:FindFirstChildWhichIsA("ClickDetector", true)
-                            or sibling:FindFirstChildWhichIsA("ProximityPrompt", true)
-                            or sibling:FindFirstChildWhichIsA("TouchTransmitter", true)
-                        if hasInteraction or requirementEventMesh(sibling) then add(sibling) end
-                    elseif sibling:IsA("Model") then
-                        for _, part in ipairs(sibling:GetDescendants()) do
-                            if part:IsA("BasePart") then
-                                local hasInteraction = part:FindFirstChildWhichIsA("ClickDetector", true)
-                                    or part:FindFirstChildWhichIsA("ProximityPrompt", true)
-                                    or part:FindFirstChildWhichIsA("TouchTransmitter", true)
-                                if hasInteraction or requirementEventMesh(part) then add(part) end
-                            end
-                        end
-                    end
-                end
-            end
-        end
     end
 
     return result
 end
-
 function Solver.objectiveNeedsActivation(objective)
     if not objective then return false end
     if objective.Synthetic then
@@ -721,9 +785,10 @@ function Solver.activateObjective(objective)
                 end
                 handle = tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart", true)
 
-                beginAutomationMove(eventPart.CFrame + eventPart.CFrame.LookVector * -1.5 + Vector3.new(0, 1, 0))
-                task.wait(0.04)
-                automationDeadline = os.clock() + 2
+                local exactPoint = eventPart.CFrame + Vector3.new(0, 0.8, 0)
+                beginAutomationMove(exactPoint)
+                task.wait(objective.Synthetic and 0.02 or 0.03)
+                automationDeadline = os.clock() + 1.5
 
                 local touchPart = handle
                 if not touchPart or not touchPart.Parent then
@@ -747,9 +812,9 @@ function Solver.activateObjective(objective)
                 if prompt and fireproximityprompt then pcall(fireproximityprompt, prompt) end
 
                 local interactionBefore = before
-                local waitDeadline = os.clock() + 0.28
+                local waitDeadline = os.clock() + (objective.Synthetic and 0.18 or 0.24)
                 repeat
-                    task.wait(0.025)
+                    task.wait(0.02)
                     if not Solver.objectiveNeedsActivation(objective)
                         or not findOwnedById(objective.Id)
                         or progressFingerprint() ~= interactionBefore then
@@ -772,7 +837,7 @@ function Solver.activateObjective(objective)
         end
     end)
 
-    task.wait(0.05)
+    task.wait(objective.Synthetic and 0.02 or 0.035)
     local completed = objective.Synthetic and false or not Solver.objectiveStillActive(objective)
     local toolConsumed = tool and (not tool.Parent or tool.Parent ~= toolParent)
         and not findOwnedById(objective.Id)
@@ -1062,8 +1127,10 @@ function Round.autoCompleteStep()
             if objective.Synthetic and objective.NeedsTarget then
                 local target = Synth.syntheticTarget(objective.Id)
                 if target and getPart(target) then
+                    local usePart = Synth.syntheticUsePart(objective.Id, target) or getPart(target)
                     objective.Target = target
-                    objective.Part = getPart(target)
+                    objective.Part = usePart
+                    objective.UsePart = usePart
                     objective.TargetName = Solver.readableTargetName(objective.Id, target)
                     objective.NeedsTarget = nil
                 end
