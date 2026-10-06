@@ -4113,9 +4113,10 @@ end)()
         end
     end
 
+    local Synth = {}
     local syntheticCompleted = {}
 
-    local function syntheticTarget(id)
+    function Synth.syntheticTarget(id)
         local map = currentMapModel()
         if not map then return nil end
 
@@ -4156,13 +4157,13 @@ end)()
         return bestScore >= 6 and best or nil
     end
 
-    local function syntheticObjective(id, parentId)
+    function Synth.syntheticObjective(id, parentId)
         if syntheticCompleted[id] then return nil end
 
         local owned = findOwnedById and findOwnedById(id)
         local worldItem = findItemById and findItemById(id)
 
-        local target = syntheticTarget(id)
+        local target = Synth.syntheticTarget(id)
         local part = target and getPart(target)
         if not target or not part then
             -- Still expose the prerequisite so the solver collects it first.
@@ -4193,7 +4194,7 @@ end)()
         }
     end
 
-    local function reconcileSyntheticState()
+    function Synth.reconcileSyntheticState()
         local mapName = currentMapName()
         if mapName ~= "House" then return end
 
@@ -4222,7 +4223,7 @@ end)()
     end
 
     local function collectObjectives()
-        reconcileSyntheticState()
+        Synth.reconcileSyntheticState()
         local result = {}
         local seen = {}
         for value in pairs(requirements) do
@@ -4267,7 +4268,7 @@ end)()
                                 end
                             end
                             if not alreadyActive then
-                                local synthetic = syntheticObjective(dependency, parent.Id)
+                                local synthetic = Synth.syntheticObjective(dependency, parent.Id)
                                 if synthetic and synthetic.Part then
                                     result[#result + 1] = synthetic
                                 end
@@ -4709,7 +4710,9 @@ end)()
         return ok and completed, ok and progressed
     end
 
-    local function isEscapeRelatedPart(part)
+    local Round = {}
+
+    function Round.isEscapeRelatedPart(part)
         if not part or not part.Parent then return false end
         if escapeTargets[part] then return true end
 
@@ -4728,7 +4731,7 @@ end)()
         return false
     end
 
-    local function nearEscapeTrigger(distanceLimit)
+    function Round.nearEscapeTrigger(distanceLimit)
         local character = localPlayer.Character
         local root = character and character:FindFirstChild("HumanoidRootPart")
         if not root then return false end
@@ -4743,7 +4746,7 @@ end)()
         return false
     end
 
-    local function finishRun(reason)
+    function Round.finishRun(reason)
         if runFinished then return end
         runFinished = true
         finishedMapInstance = currentMapModel()
@@ -4761,21 +4764,21 @@ end)()
         if objectiveStatusLabel then objectiveStatusLabel:Set("Status: round completed" .. (reason and " | " .. reason or "")) end
     end
 
-    local function exitRequirementActive()
+    function Round.exitRequirementActive()
         for value in pairs(requirements) do
             if value.Parent and isObjectiveRequirement(value) then
                 local id = idFromText(value.Value)
                 if id == "WhiteKey" or id == "KeyCode" or id == "BlueKeycard" then
                     local host = requirementHost(value)
                     local part = host and getPart(host)
-                    if part and isEscapeRelatedPart(part) then return true end
+                    if part and Round.isEscapeRelatedPart(part) then return true end
                 end
             end
         end
         return false
     end
 
-    local function autoEscapeStep()
+    function Round.autoEscapeStep()
         if runFinished then return false end
         local now = os.clock()
         if now - lastEscapeAttempt < 0.75 then return false end
@@ -4815,7 +4818,7 @@ end)()
         local beforePosition = best.Position
         local beforeTransparency = best.Transparency
         local beforeCollision = best.CanCollide
-        local beforeRequirement = exitRequirementActive()
+        local beforeRequirement = Round.exitRequirementActive()
 
         escapeTouchOverride = true
         setCharacterTouch(false)
@@ -4848,7 +4851,7 @@ end)()
         endAutomationMove()
         escapeTouchOverride = false
 
-        local exitStillLocked = exitRequirementActive()
+        local exitStillLocked = Round.exitRequirementActive()
         local targetChanged = not best.Parent
             or best.Position ~= beforePosition
             or best.Transparency ~= beforeTransparency
@@ -4857,7 +4860,7 @@ end)()
 
         if targetChanged or requirementCleared then
             finishedEscapePart = best
-            finishRun("exit reached")
+            Round.finishRun("exit reached")
             return true
         end
 
@@ -4865,14 +4868,14 @@ end)()
         -- has accepted the escape. Never hammer the same door indefinitely.
         if escapeAttempts >= 2 then
             finishedEscapePart = best
-            finishRun("exit interaction accepted")
+            Round.finishRun("exit interaction accepted")
             return true
         end
 
         return true
     end
 
-    local function resetRoundAutomation()
+    function Round.resetRoundAutomation()
         runFinished = false
         finishedMapInstance = nil
         finishedEscapePart = nil
@@ -4890,7 +4893,7 @@ end)()
         releaseAutomation()
     end
 
-    local function updateRoundState()
+    function Round.updateRoundState()
         if not runFinished then return end
         local map = currentMapModel()
 
@@ -4899,14 +4902,14 @@ end)()
 
         -- A different map instance means a fresh round. Keep Full Run enabled.
         if map and map ~= finishedMapInstance then
-            resetRoundAutomation()
+            Round.resetRoundAutomation()
         end
     end
 
-    local function autoCompleteStep()
+    function Round.autoCompleteStep()
         if not autoComplete then return end
         if runFinished then
-            updateRoundState()
+            Round.updateRoundState()
             return
         end
         if autoCompleteBusy then return end
@@ -4930,7 +4933,7 @@ end)()
                         task.wait(0.03)
                         refreshObjectiveState()
                     else
-                        autoEscapeStep()
+                        Round.autoEscapeStep()
                     end
                     return
                 end
@@ -4941,7 +4944,7 @@ end)()
             local required = equipRequired(objective.Id)
             if required then
                 if objective.Synthetic and objective.NeedsTarget then
-                    local target = syntheticTarget(objective.Id)
+                    local target = Synth.syntheticTarget(objective.Id)
                     if target and getPart(target) then
                         objective.Target = target
                         objective.Part = getPart(target)
@@ -5046,7 +5049,7 @@ end)()
     local function applyGodMode()
         if not godMode then return end
 
-        local allowEscapeTouch = escapeTouchOverride or nearEscapeTrigger(12)
+        local allowEscapeTouch = escapeTouchOverride or Round.nearEscapeTrigger(12)
         if allowEscapeTouch then
             setCharacterTouch(false)
         else
@@ -5094,7 +5097,7 @@ end)()
     function Actions.applyTrapBypass(value)
         for trap in pairs(traps) do
             if trap.Parent then
-                if isEscapeRelatedPart(trap) then
+                if Round.isEscapeRelatedPart(trap) then
                     scope:Restore(trap, "CanTouch")
                 elseif value then
                     scope:Set(trap, "CanTouch", false)
@@ -5271,7 +5274,7 @@ end)()
             autoComplete = value
             releaseAutomation()
             if value then
-                resetRoundAutomation()
+                Round.resetRoundAutomation()
                 autoGrab = false
                 autoInteract = false
                 scope:StopTask("autoGrab")
