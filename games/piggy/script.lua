@@ -515,11 +515,12 @@ return function(ctx)
         },
         City = {
             Gates = {
+                FireExtinguisher = {Active = {"Dynamite"}},
                 KeyCode = {Active = {"FireExtinguisher", "Plank"}},
             },
             Depends = {
                 FireExtinguisher = {"Dynamite"},
-                KeyCode = {"Dynamite", "FireExtinguisher", "Plank", "Wrench"},
+                KeyCode = {"FireExtinguisher", "Plank"},
             },
             Priority = {
                 GreenKeycard = 10, RedKeycard = 15, OrangeKeycard = 20, BlueKeycard = 25,
@@ -551,12 +552,12 @@ return function(ctx)
             Gates = {
                 Gas = {Active = {"FireExtinguisher"}},
                 TankBullet = {Active = {"Wrench"}},
-                BlueKeycard = {Present = {"Gas", "TankBullet"}},
+                BlueKeycard = {Present = {"Gas", "TankBullet"}, Active = {"Gas", "TankBullet"}},
             },
             Depends = {
                 Gas = {"FireExtinguisher"},
                 TankBullet = {"Wrench"},
-                BlueKeycard = {"Gas", "TankBullet", "Wrench", "FireExtinguisher"},
+                BlueKeycard = {"Gas", "TankBullet"},
             },
             Priority = {
                 BlueKey = 10, GreenKey = 15, OrangeKey = 20, RedKey = 25, YellowKey = 30,
@@ -565,14 +566,19 @@ return function(ctx)
         },
         Plant = {
             Gates = {
-                PurpleVial = {Present = {"Battery"}},
-                Dynamite = {Present = {"GreenVial", "PurpleVial"}},
+                Plank = {Active = {"YellowKey"}},
+                Hammer = {Active = {"Plank"}},
+                GreenVial = {Active = {"Hammer"}},
+                PurpleVial = {Present = {"Battery"}, Active = {"Battery"}},
+                Dynamite = {Present = {"GreenVial", "PurpleVial"}, Active = {"GreenVial", "PurpleVial"}},
                 WhiteKey = {Present = {"Torch"}, Active = {"Torch"}},
-                Mallet = {Present = {"Coin"}},
+                Mallet = {Present = {"Coin"}, Active = {"Coin"}},
             },
             Depends = {
-                GreenVial = {"OrangeKeycard", "YellowKey", "Plank", "Hammer"},
-                PurpleVial = {"RedKey", "BlueKey", "Battery"},
+                Plank = {"OrangeKeycard", "YellowKey"},
+                Hammer = {"Plank"},
+                GreenVial = {"Hammer"},
+                PurpleVial = {"Battery"},
                 Dynamite = {"GreenVial", "PurpleVial"},
                 WhiteKey = {"Torch"},
                 Mallet = {"Coin"},
@@ -590,9 +596,13 @@ return function(ctx)
         Alleys = {
             Puzzle = "DigitCode",
             PuzzleBefore = {"WhiteKey"},
+            Gates = {
+                Screwdriver = {Active = {"YellowKey"}},
+                WhiteKey = {Active = {"PurpleKey", "OrangeKey"}},
+            },
             Depends = {
-                Screwdriver = {"YellowKey"},
-                WhiteKey = {"OrangeKey", "Scissors", "Mop", "Screwdriver", "PurpleKey", "KeyCode"},
+                Screwdriver = {"YellowKey", "GreenKey"},
+                WhiteKey = {"PurpleKey", "OrangeKey"},
             },
             Priority = {
                 OrangeKey = 10, Scissors = 15, BlueKey = 20, GreenKey = 25, RedKey = 30,
@@ -602,11 +612,11 @@ return function(ctx)
         Store = {
             Gates = {
                 YellowKey = {Active = {"RemoteControl"}},
+                Ladder = {Active = {"YellowKey"}},
             },
             Depends = {
                 YellowKey = {"RemoteControl"},
-                Ladder = {"YellowKey"},
-                Battery = {"Ladder"},
+                Ladder = {"YellowKey", "RedKey", "BlueKey"},
             },
             Counters = {
                 RemoteControl = 4,
@@ -650,11 +660,10 @@ return function(ctx)
         },
         Sewers = {
             Gates = {
-                Mop = {Present = {"WhiteGear"}, Active = {"WhiteGear", "Screwdriver", "YellowKey"}},
+                Mop = {Active = {"WhiteGear", "Screwdriver", "YellowKey"}},
                 WhiteKey = {Present = {"Mop"}, Active = {"Mop"}},
             },
             Depends = {
-                WhiteGear = {"Screwdriver"},
                 Mop = {"GreenKey", "WhiteGear", "Screwdriver", "YellowKey"},
                 WhiteKey = {"Mop"},
             },
@@ -667,6 +676,14 @@ return function(ctx)
             },
         },
         Factory = {
+            Gates = {
+                Screwdriver = {Active = {"PurpleKey"}},
+                OrangeKey = {Active = {"YellowKey"}},
+            },
+            Depends = {
+                Screwdriver = {"PurpleKey", "BlueKey", "RedKey"},
+                OrangeKey = {"YellowKey", "RedKey", "BlueKey", "GreenKey"},
+            },
             Counters = {
                 WoodenSword = 3,
             },
@@ -736,12 +753,12 @@ return function(ctx)
             PuzzleBefore = {"WhiteKey"},
             Gates = {
                 Hammer = {Active = {"YellowKey"}},
-                WhiteKey = {Active = {"PurpleKey"}},
+                WhiteKey = {Active = {"PurpleKey", "Shovel", "Plank", "Candle"}},
             },
             Depends = {
                 Hammer = {"RedKey", "YellowKey"},
                 Plank = {"Hammer"},
-                WhiteKey = {"PurpleKey", "Plank"},
+                WhiteKey = {"PurpleKey", "Shovel", "Plank", "Candle"},
             },
             Priority = {
                 BlueKey = 10, GreenKey = 15, OrangeKey = 20, RedKey = 25,
@@ -753,13 +770,13 @@ return function(ctx)
             Puzzle = "LightCircle",
             Gates = {
                 TNT = {Active = {"PurpleKey"}},
-                ElevatorKey = {Active = {"YellowKey"}},
+                ElevatorKey = {Active = {"YellowKey", "RedKey"}},
             },
             Depends = {
                 Ladder = {"Shovel"},
                 Rope = {"GreenKey"},
                 TNT = {"PurpleKey"},
-                ElevatorKey = {"YellowKey"},
+                ElevatorKey = {"YellowKey", "RedKey"},
             },
             Priority = {
                 GreenKey = 10, OrangeKey = 15, BlueKey = 20, RedKey = 25,
