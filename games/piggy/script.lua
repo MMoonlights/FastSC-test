@@ -44,6 +44,7 @@ return function(ctx)
     local objectivePuzzleLabel
     local currentObjective
     local findOwnedById
+    local findItemById
     local lastPickupStatus = "idle"
     local objectiveEsp = false
     local objectiveVisualTarget
@@ -4044,7 +4045,7 @@ end)()
         return "Objective"
     end
 
-    local function findItemById(id)
+    findItemById = function(id)
         local bucket = itemsById[id]
         if not bucket then return nil, math.huge end
         local root = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
