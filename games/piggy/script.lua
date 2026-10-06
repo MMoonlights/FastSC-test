@@ -1092,9 +1092,27 @@ return function(ctx)
         return fallback
     end
 
+    local optionalObjectiveIds = {
+        Ammo = true,
+        Gun = true,
+        Bone = true,
+        Grass = true,
+        Apple = true,
+        Rose = true,
+        Crossbow = true,
+    }
+
+    local carrotProgressionMaps = {
+        Store = true,
+        Refinery = true,
+    }
+
     local function isObjectiveRequirement(value)
         if not value or not value.Parent or not value:IsA("StringValue") then return false end
-        if not aliases[token(value.Value)] then return false end
+        local requirementId = aliases[token(value.Value)]
+        if not requirementId then return false end
+        if optionalObjectiveIds[requirementId] then return false end
+        if requirementId == "Carrot" and not carrotProgressionMaps[currentMapName()] then return false end
         if itemObjectFrom(value) then return false end
 
         local map = currentMapModel()
@@ -3297,7 +3315,23 @@ end)()
         if playerCharacterAncestor(host) or underPiggyFolder(host) then return false end
 
         local name = freeInteractionName(interactive)
-        if name:find("exit", 1, true) or name:find("escape", 1, true) or name:find("final", 1, true) then
+        if name:find("exit", 1, true)
+            or name:find("escape", 1, true)
+            or name:find("final", 1, true)
+            or name:find("quest", 1, true)
+            or name:find("secret", 1, true)
+            or name:find("hidden", 1, true)
+            or name:find("insolence", 1, true) then
+            return false
+        end
+
+        local mapName = currentMapName()
+        if mapName == "Lab" and (name:find("symbol", 1, true)
+            or name:find("keypad", 1, true)
+            or name:find("terminal", 1, true)) then
+            return false
+        end
+        if mapName == "Camp" and name:find("terminal", 1, true) then
             return false
         end
 
