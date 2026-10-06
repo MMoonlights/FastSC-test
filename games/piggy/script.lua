@@ -51,6 +51,7 @@ return function(ctx)
     local autoCompleteBusy = false
     local runFinished = false
     local finishedMapInstance
+    local finishedEscapePart
     local escapeAttempts = 0
     local lastEscapeAttempt = 0
     local pickupBusy = false
@@ -4850,6 +4851,15 @@ end)()
         end
         if not best then return false end
 
+        if finishedEscapePart and best == finishedEscapePart then
+            return false
+        end
+
+        local beforePosition = best.Position
+        local beforeTransparency = best.Transparency
+        local beforeCollision = best.CanCollide
+        local beforeRequirement = exitRequirementActive()
+
         escapeTouchOverride = true
         setCharacterTouch(false)
 
@@ -4882,23 +4892,33 @@ end)()
         escapeTouchOverride = false
 
         local exitStillLocked = exitRequirementActive()
-        local stillNearExit = nearEscapeTrigger(16)
-        if not exitStillLocked and (not stillNearExit or escapeAttempts >= 2) then
+        local targetChanged = not best.Parent
+            or best.Position ~= beforePosition
+            or best.Transparency ~= beforeTransparency
+            or best.CanCollide ~= beforeCollision
+        local requirementCleared = beforeRequirement and not exitStillLocked
+
+        if targetChanged or requirementCleared then
+            finishedEscapePart = best
             finishRun("exit reached")
             return true
         end
 
-        -- Do not hammer the same exit every solver tick.
-        if escapeAttempts >= 4 and not exitStillLocked then
-            finishRun("exit interaction completed")
+        -- Piggy can leave stale ToolRequired/door parts around after the server
+        -- has accepted the escape. Never hammer the same door indefinitely.
+        if escapeAttempts >= 2 then
+            finishedEscapePart = best
+            finishRun("exit interaction accepted")
             return true
         end
+
         return true
     end
 
     local function resetRoundAutomation()
         runFinished = false
         finishedMapInstance = nil
+        finishedEscapePart = nil
         escapeAttempts = 0
         lastEscapeAttempt = 0
         syntheticCompleted = {}
