@@ -1531,6 +1531,12 @@ return function(ctx)
         local map = currentMapName()
 
         local profile = mapProfiles[map]
+        if map == "House" and id == "WhiteKey" then
+            -- Physical WhiteKey spawn is authoritative proof that the well is complete.
+            syntheticCompleted.RedGear = true
+            syntheticCompleted.GreenGear = true
+        end
+
         local gate = profile and profile.Gates and profile.Gates[id]
         if gate then
             for _, dependency in ipairs(gate.Present or {}) do
@@ -4188,7 +4194,36 @@ end)()
         }
     end
 
+    local function reconcileSyntheticState()
+        local mapName = currentMapName()
+        if mapName ~= "House" then return end
+
+        -- In House the White Key is the output of the well/gear mechanism.
+        -- Once it exists as a real world pickup, both gear stages are complete,
+        -- regardless of whether Piggy removed/renamed the individual gear events.
+        local whiteKey = findItemById and findItemById("WhiteKey")
+        if whiteKey and isWorldItem(whiteKey) then
+            syntheticCompleted.RedGear = true
+            syntheticCompleted.GreenGear = true
+            return
+        end
+
+        -- If a gear no longer exists anywhere and is no longer owned after it
+        -- was previously available, treat its placement as complete.
+        for _, id in ipairs({"RedGear", "GreenGear"}) do
+            if not syntheticCompleted[id] then
+                local owned = findOwnedById and findOwnedById(id)
+                local world = findItemById and findItemById(id)
+                if not owned and not world and not requirementExists(id) then
+                    -- Do not mark it from absence alone at map start; only the
+                    -- WhiteKey output above is authoritative.
+                end
+            end
+        end
+    end
+
     local function collectObjectives()
+        reconcileSyntheticState()
         local result = {}
         local seen = {}
         for value in pairs(requirements) do
@@ -4635,6 +4670,18 @@ end)()
         if objective.Synthetic and (toolConsumed or targetChanged) then
             syntheticCompleted[objective.Id] = true
             completed = true
+            itemUiDirty = true
+        end
+
+        if currentMapName() == "House" then
+            local whiteKey = findItemById and findItemById("WhiteKey")
+            if whiteKey and isWorldItem(whiteKey) then
+                syntheticCompleted.RedGear = true
+                syntheticCompleted.GreenGear = true
+                completed = objective.Synthetic and true or completed
+                progressed = true
+                itemUiDirty = true
+            end
         end
 
         endAutomationMove()
