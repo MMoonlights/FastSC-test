@@ -1131,18 +1131,3 @@ function freeInteractionName(interactive)
     return table.concat(chunks, " ")
 end
 
-solveCodePanel, solveSpecialPuzzle, getPuzzleStatus, progressFingerprint = (function()
-puzzleBusy = false
-puzzleStatus = "idle"
-puzzleRetryAt = 0
-solvedPuzzles = {}
-
-canonicalRoots = {
-    DigitCode = {"digitcodepad", "digitcode", "numbercodepad", "codepad"},
-    ColorCode = {"colorcodepad", "colorcode"},
-    RomanCode = {"romannumeralpuzzlemain", "romannumeralpuzzle", "romannumeral"},
-    ShapeWheel = {"shapecodewheel", "shapewheel", "shapecode"},
-    LightCircle = {"lightcirclepuzzle", "lightcircle"},
-    ReactorGrid = {"ninesquarespuzzle", "ninesquares", "leverpuzzle"},
-}
-
