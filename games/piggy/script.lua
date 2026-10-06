@@ -384,23 +384,26 @@ return function(ctx)
     local mapProfiles = {
         House = {
             Gates = {
-                WhiteKey = {Present = {"RedGear", "GreenGear"}},
+                WhiteKey = {Present = {"RedGear", "GreenGear"}, Active = {"RedGear", "GreenGear"}},
+                KeyCode = {Active = {"YellowKey"}},
             },
             Depends = {
-                WhiteKey = {"RedGear", "GreenGear", "Hammer", "Wrench", "KeyCode"},
+                KeyCode = {"YellowKey"},
+                WhiteKey = {"RedGear", "GreenGear"},
             },
             Priority = {
-                GreenKey = 10, RedKey = 20, BlueKey = 30, YellowKey = 35, OrangeKey = 40,
-                RedGear = 45, GreenGear = 45, Plank = 50, Hammer = 55, Wrench = 56, KeyCode = 57, WhiteKey = 100,
+                GreenKey = 10, RedKey = 20, BlueKey = 30, Plank = 34, YellowKey = 35, OrangeKey = 40,
+                Wrench = 42, RedGear = 45, GreenGear = 46, Hammer = 55, KeyCode = 57, WhiteKey = 100,
             },
         },
         Station = {
             Gates = {
-                Gas = {Present = {"Battery"}},
+                Gas = {Present = {"Battery"}, Active = {"Battery"}},
+                WhiteKey = {Active = {"YellowKey"}},
             },
             Depends = {
-                WhiteKey = {"Hammer", "Wrench", "Plank"},
-                Gas = {"Battery", "Hammer", "Wrench", "Plank"},
+                WhiteKey = {"YellowKey"},
+                Gas = {"Battery"},
             },
             Counters = {
                 Battery = 2,
@@ -412,10 +415,10 @@ return function(ctx)
         },
         Gallery = {
             Gates = {
-                WhiteKey = {Present = {"RedEgg", "GreenEgg"}},
+                WhiteKey = {Present = {"RedEgg", "GreenEgg"}, Active = {"RedEgg", "GreenEgg"}},
             },
             Depends = {
-                WhiteKey = {"RedEgg", "GreenEgg", "Hammer", "Wrench"},
+                WhiteKey = {"RedEgg", "GreenEgg"},
             },
             Priority = {
                 RedKey = 10, BlueKey = 15, GreenKey = 20, OrangeKey = 25, YellowKey = 30,
@@ -427,7 +430,7 @@ return function(ctx)
                 WhiteKey = {Present = {"Torch"}, Active = {"Torch"}},
             },
             Depends = {
-                WhiteKey = {"Torch", "Hammer", "Wrench", "Plank"},
+                WhiteKey = {"Torch"},
             },
             Priority = {
                 GreenKey = 10, RedKey = 15, BlueKey = 20, OrangeKey = 25, YellowKey = 30,
@@ -436,9 +439,7 @@ return function(ctx)
         },
         School = {
             Depends = {
-                RedGear = {"Book"},
                 GreenGear = {"Book"},
-                WhiteKey = {"Book", "RedGear", "GreenGear", "Hammer", "Wrench"},
             },
             Priority = {
                 GreenKey = 10, BlueKey = 15, OrangeKey = 20, Book = 25,
@@ -448,10 +449,10 @@ return function(ctx)
         },
         Hospital = {
             Gates = {
-                WhiteKey = {Present = {"EmptyVial", "GreenVial", "PurpleVial"}},
+                WhiteKey = {Present = {"EmptyVial", "GreenVial", "PurpleVial"}, Active = {"GreenVial", "PurpleVial"}},
             },
             Depends = {
-                WhiteKey = {"GreenVial", "PurpleVial", "Hammer", "Plank", "Wrench"},
+                WhiteKey = {"GreenVial", "PurpleVial", "Hammer"},
             },
             Counters = {
                 EmptyVial = 2,
@@ -661,8 +662,15 @@ return function(ctx)
         Ship = {
             Puzzle = "ColorCode",
             PuzzleBefore = {"WhiteKey"},
+            Gates = {
+                WhiteKey = {Active = {"YellowKey"}},
+                Screwdriver = {Active = {"PurpleKey"}},
+                Wrench = {Active = {"OrangeKey"}},
+            },
             Depends = {
-                WhiteKey = {"Screwdriver", "Wrench"},
+                WhiteKey = {"YellowKey"},
+                Screwdriver = {"PurpleKey"},
+                Wrench = {"OrangeKey"},
             },
             Priority = {
                 BlueKey = 10, GreenKey = 15, OrangeKey = 20, RedKey = 25, PurpleKey = 30,
@@ -672,9 +680,14 @@ return function(ctx)
         Docks = {
             Puzzle = "RomanCode",
             PuzzleBefore = {"WhiteKey"},
+            Gates = {
+                Hammer = {Active = {"OrangeKey"}},
+                WhiteKey = {Active = {"PurpleKey", "GreenKey"}},
+            },
             Depends = {
-                Plank = {"Hammer"},
-                WhiteKey = {"GreenKey", "Hammer", "Plank", "Candle", "TNT"},
+                Hammer = {"OrangeKey"},
+                Plank = {"BlueKey", "Hammer"},
+                WhiteKey = {"PurpleKey", "GreenKey", "Plank"},
             },
             Priority = {
                 BlueKey = 10, GreenKey = 15, OrangeKey = 20, RedKey = 25,
@@ -685,10 +698,14 @@ return function(ctx)
         Temple = {
             Puzzle = "ShapeWheel",
             PuzzleBefore = {"WhiteKey"},
+            Gates = {
+                Hammer = {Active = {"YellowKey"}},
+                WhiteKey = {Active = {"PurpleKey"}},
+            },
             Depends = {
-                Hammer = {"RedKey"},
+                Hammer = {"RedKey", "YellowKey"},
                 Plank = {"Hammer"},
-                WhiteKey = {"Shovel", "Hammer", "Plank", "Candle", "Gas"},
+                WhiteKey = {"PurpleKey", "Plank"},
             },
             Priority = {
                 BlueKey = 10, GreenKey = 15, OrangeKey = 20, RedKey = 25,
@@ -698,8 +715,15 @@ return function(ctx)
         },
         Camp = {
             Puzzle = "LightCircle",
+            Gates = {
+                TNT = {Active = {"PurpleKey"}},
+                ElevatorKey = {Active = {"YellowKey"}},
+            },
             Depends = {
-                ElevatorKey = {"RedKey", "Shovel", "Ladder", "Rope", "TNT"},
+                Ladder = {"Shovel"},
+                Rope = {"GreenKey"},
+                TNT = {"PurpleKey"},
+                ElevatorKey = {"YellowKey"},
             },
             Priority = {
                 GreenKey = 10, OrangeKey = 15, BlueKey = 20, RedKey = 25,
@@ -711,6 +735,9 @@ return function(ctx)
             Puzzle = "ReactorLevers",
             Depends = {
                 BlueKeycard = {"Wrench"},
+                Pipe = {"Screwdriver"},
+                WaterGun = {"Hammer"},
+                Mop = {"Dynamite"},
             },
             Priority = {
                 GreenKey = 10, PurpleKey = 15, YellowKey = 20, Wrench = 25,
