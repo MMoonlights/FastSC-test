@@ -215,21 +215,50 @@ automationLastCorrection = 0
 automationLastMoveAt = 0
 automationLastTarget = nil
 automationHold = false
+automationHoldTarget = nil
+
+function automationPhysics(character, root, humanoid)
+    if not root then return end
+
+    -- Full Run must never Anchor the character. Piggy's pickup handling can
+    -- reject/ignore interactions from an anchored character even when the
+    -- detector itself fires. Keep the player suspended with velocity + CFrame
+    -- correction instead, like the older working flight controller.
+    scope:Set(root, "Anchored", false)
+    root.AssemblyLinearVelocity = Vector3.zero
+    root.AssemblyAngularVelocity = Vector3.zero
+
+    if humanoid then
+        pcall(function()
+            humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+        end)
+    end
+end
 
 function setAutomationHold(enabled)
     automationHold = enabled == true
+
     local character = localPlayer.Character
     local root = character and character:FindFirstChild("HumanoidRootPart")
-    if not root then return end
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 
     if automationHold then
-        scope:Set(root, "Anchored", true)
-        root.AssemblyLinearVelocity = Vector3.zero
-        root.AssemblyAngularVelocity = Vector3.zero
+        if root then
+            automationHoldTarget = root.CFrame
+            automationPhysics(character, root, humanoid)
+        end
     else
-        scope:Restore(root, "Anchored")
-        root.AssemblyLinearVelocity = Vector3.zero
-        root.AssemblyAngularVelocity = Vector3.zero
+        automationHoldTarget = nil
+        if root then
+            scope:Restore(root, "Anchored")
+            root.AssemblyLinearVelocity = Vector3.zero
+            root.AssemblyAngularVelocity = Vector3.zero
+        end
+        if humanoid then
+            pcall(function()
+                humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+            end)
+        end
     end
 end
 
@@ -270,14 +299,14 @@ function beginAutomationMove(target)
 
     automationActive = true
     automationTarget = target
-    if automationHold then
-        scope:Set(root, "Anchored", true)
-    end
-    automationDeadline = now + 2
+    automationHoldTarget = target
+    automationDeadline = now + 3
+
     setAutomationCollision(true)
+    automationPhysics(character, root, humanoid)
     if humanoid then scope:Set(humanoid, "AutoRotate", false) end
 
-    if not sameTarget or (root.Position - target.Position).Magnitude > 5 then
+    if not sameTarget or (root.Position - target.Position).Magnitude > 0.35 then
         zeroCharacterVelocity(character)
         pcall(function() character:PivotTo(target) end)
         root.CFrame = target
@@ -292,14 +321,31 @@ function endAutomationMove()
     local character = localPlayer.Character
     local root = character and character:FindFirstChild("HumanoidRootPart")
     local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+
+    if automationHold and root then
+        automationHoldTarget = root.CFrame
+    end
+
     automationTarget = nil
     automationActive = false
     automationDeadline = 0
     zeroCharacterVelocity(character)
-    if humanoid then scope:Restore(humanoid, "AutoRotate") end
-    if automationHold and root then
-        scope:Set(root, "Anchored", true)
+
+    if automationHold then
+        automationPhysics(character, root, humanoid)
+    elseif root then
+        scope:Restore(root, "Anchored")
     end
+
+    if humanoid then
+        scope:Restore(humanoid, "AutoRotate")
+        if not automationHold then
+            pcall(function()
+                humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+            end)
+        end
+    end
+
     if not noclip then setAutomationCollision(false) end
 end
 
@@ -310,15 +356,25 @@ function releaseAutomation()
     endAutomationMove()
 
     local character = localPlayer.Character
+    local root = character and character:FindFirstChild("HumanoidRootPart")
     local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+
     if humanoid then
         humanoid.Jump = false
         scope:Restore(humanoid, "AutoRotate")
     end
+
     if automationHold then
-        local root = character and character:FindFirstChild("HumanoidRootPart")
-        if root then scope:Set(root, "Anchored", true) end
+        if root then
+            automationHoldTarget = root.CFrame
+            automationPhysics(character, root, humanoid)
+        end
+    elseif humanoid then
+        pcall(function()
+            humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+        end)
     end
+
     if not noclip then setAutomationCollision(false) end
     zeroCharacterVelocity(character)
 end
@@ -326,30 +382,38 @@ end
 scope:Connect(RunService.PreSimulation, function()
     local character = localPlayer.Character
     local root = character and character:FindFirstChild("HumanoidRootPart")
-
-    if automationHold and root then
-        scope:Set(root, "Anchored", true)
-        root.AssemblyLinearVelocity = Vector3.zero
-        root.AssemblyAngularVelocity = Vector3.zero
-    end
-
-    if not automationActive then return end
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
     local now = os.clock()
-    if automationDeadline > 0 and now > automationDeadline then
-        -- Movement timeout only releases the CFrame lock. The active solver/pickup
-        -- coroutine owns its busy flags and must be the only code allowed to clear
-        -- them, otherwise a slow server confirmation can overlap another pass.
+
+    if automationActive and automationDeadline > 0 and now > automationDeadline then
+        -- The solver coroutine owns its busy flags. Only stop this movement hold.
         endAutomationMove()
         return
     end
-    if not root or not automationTarget then return end
 
-    local drift = (root.Position - automationTarget.Position).Magnitude
-    if drift > 1.5 and now - automationLastCorrection >= 0.08 then
-        automationLastCorrection = now
-        zeroCharacterVelocity(character)
-        pcall(function() character:PivotTo(automationTarget) end)
-        root.CFrame = automationTarget
+    if automationHold and root then
+        automationPhysics(character, root, humanoid)
+
+        local target = automationTarget or automationHoldTarget
+        if target then
+            local drift = (root.Position - target.Position).Magnitude
+            if drift > 0.18 and now - automationLastCorrection >= 0.03 then
+                automationLastCorrection = now
+                zeroCharacterVelocity(character)
+                pcall(function() character:PivotTo(target) end)
+                root.CFrame = target
+            end
+        else
+            automationHoldTarget = root.CFrame
+        end
+    elseif automationActive and root and automationTarget then
+        local drift = (root.Position - automationTarget.Position).Magnitude
+        if drift > 1.5 and now - automationLastCorrection >= 0.08 then
+            automationLastCorrection = now
+            zeroCharacterVelocity(character)
+            pcall(function() character:PivotTo(automationTarget) end)
+            root.CFrame = automationTarget
+        end
     end
 end)
 
