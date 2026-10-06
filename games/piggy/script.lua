@@ -2491,7 +2491,9 @@ return function(ctx)
                     or text:find("exit", 1, true)
                     or text:find("gate", 1, true)
                     or text:find("barrier", 1, true)
-                    or text:find("safe", 1, true) then
+                    or text:find("safe", 1, true)
+                    or text:find("portal", 1, true)
+                    or text:find("armory", 1, true) then
                     local p = descendant.Position
                     chunks[#chunks + 1] = table.concat({
                         "p", tostring(descendant),
@@ -2873,6 +2875,7 @@ return function(ctx)
         Yellow = Color3.fromRGB(255, 255, 0),
         Blue = Color3.fromRGB(0, 85, 255),
         Green = Color3.fromRGB(0, 255, 0),
+        Purple = Color3.fromRGB(170, 0, 255),
     }
 
     local function nearestPuzzleColor(color)
@@ -3441,6 +3444,241 @@ return function(ctx)
         return false
     end
 
+
+    local function breakoutArmoryRoot()
+        local map = currentMapModel()
+        if not map then return nil end
+        local best
+        local bestCount = math.huge
+
+        for _, descendant in ipairs(map:GetDescendants()) do
+            if descendant:IsA("Model") or descendant:IsA("Folder") or descendant:IsA("BasePart") then
+                local text = ancestorText(descendant, 3)
+                if text:find("armory", 1, true) then
+                    local controls = uniqueControls(controlsUnder(descendant))
+                    if #controls >= 4 and #controls < bestCount then
+                        best = descendant
+                        bestCount = #controls
+                    end
+                end
+            end
+        end
+
+        if best then return best end
+
+        local controls, root = groupedControls(4, {"armory", "code", "color", "button"}, false)
+        if #controls >= 4 then return root end
+        return nil
+    end
+
+    local function breakoutColorButtons(root)
+        if not root then return nil end
+        local byColor = {}
+        for _, control in ipairs(uniqueControls(controlsUnder(root))) do
+            local color = controlColorName(control)
+            if color and not byColor[color] then byColor[color] = control end
+        end
+
+        for _, color in ipairs({"Red", "Blue", "Green", "Purple"}) do
+            if not byColor[color] then return nil end
+        end
+        return byColor
+    end
+
+    local function breakoutKnife()
+        if findOwnedById then
+            local owned = findOwnedById("MilitaryKnife")
+            if owned then return owned end
+        end
+
+        for item in pairs(items) do
+            if item.Parent and itemId(item) == "MilitaryKnife" and isAvailableWorldItem(item) then
+                local ok = grabItem(item, false, "MilitaryKnife")
+                if ok and findOwnedById then
+                    local owned = findOwnedById("MilitaryKnife")
+                    if owned then return owned end
+                end
+            end
+        end
+    end
+
+    local function breakoutOmbra()
+        local fallback
+        for _, descendant in ipairs(workspace:GetDescendants()) do
+            if descendant:IsA("Model") then
+                local name = token(descendant.Name)
+                if name == "ombra" then return descendant end
+                if name:find("ombra", 1, true)
+                    and not name:find("red", 1, true)
+                    and not name:find("purple", 1, true) then
+                    fallback = fallback or descendant
+                end
+            end
+        end
+        return fallback
+    end
+
+    local function useBreakoutKnife()
+        local knife = breakoutKnife()
+        local ombra = breakoutOmbra()
+        if not knife or not ombra then return false end
+
+        local character = localPlayer.Character
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+        local ombraPart = getPart(ombra)
+        if not character or not humanoid or not ombraPart then return false end
+
+        if knife.Parent ~= character then
+            humanoid:EquipTool(knife)
+            task.wait(0.04)
+            knife = findOwnedById and findOwnedById("MilitaryKnife") or knife
+        end
+
+        local before = progressFingerprint()
+        local handle = knife and (knife:FindFirstChild("Handle") or knife:FindFirstChildWhichIsA("BasePart", true))
+        beginAutomationMove(ombraPart.CFrame + ombraPart.CFrame.LookVector * -1.5 + Vector3.new(0, 1, 0))
+        task.wait(0.04)
+
+        if handle and firetouchinterest then
+            pcall(function()
+                firetouchinterest(handle, ombraPart, 0)
+                task.wait(0.03)
+                firetouchinterest(handle, ombraPart, 1)
+            end)
+        end
+        pcall(function() knife:Activate() end)
+
+        local root = character:FindFirstChild("HumanoidRootPart")
+        if root and firetouchinterest then
+            pcall(function()
+                firetouchinterest(root, ombraPart, 0)
+                task.wait(0.03)
+                firetouchinterest(root, ombraPart, 1)
+            end)
+        end
+
+        task.wait(0.12)
+        endAutomationMove()
+        return not ombra.Parent or progressFingerprint() ~= before
+    end
+
+    local function solveBreakoutArmory()
+        if useBreakoutKnife() then
+            puzzleStatus = "Breakout: Ombra defeated"
+            return true
+        end
+
+        local armory = breakoutArmoryRoot()
+        local buttons = breakoutColorButtons(armory)
+        if not armory or not buttons then
+            puzzleStatus = "Breakout: armory not ready"
+            return false
+        end
+
+        local colors = {"Red", "Blue", "Green", "Purple"}
+        local sequences = {}
+        local function permute(index)
+            if index > #colors then
+                local copy = {}
+                for i, value in ipairs(colors) do copy[i] = value end
+                sequences[#sequences + 1] = copy
+                return
+            end
+            for i = index, #colors do
+                colors[index], colors[i] = colors[i], colors[index]
+                permute(index + 1)
+                colors[index], colors[i] = colors[i], colors[index]
+            end
+        end
+        permute(1)
+
+        local before = progressFingerprint()
+        for attempt, sequence in ipairs(sequences) do
+            puzzleStatus = "Breakout: armory " .. tostring(attempt) .. "/24"
+            for _, color in ipairs(sequence) do
+                clickControl(buttons[color])
+                task.wait(0.02)
+            end
+            if waitForSolved(before, armory, 0.22) then
+                task.wait(0.12)
+                if useBreakoutKnife() then return true end
+                return true
+            end
+            task.wait(0.025)
+        end
+
+        return false
+    end
+
+    local function breakoutCircleRoots()
+        local map = currentMapModel()
+        if not map then return {} end
+
+        local result = {}
+        local signatures = {}
+        for _, descendant in ipairs(map:GetDescendants()) do
+            if descendant:IsA("Model") or descendant:IsA("Folder") or descendant:IsA("BasePart") then
+                local name = token(descendant.Name)
+                if name:find("circle", 1, true) or name:find("colorpad", 1, true) then
+                    local controls = uniqueControls(controlsUnder(descendant))
+                    local byColor = {}
+                    local parts = {}
+                    for _, control in ipairs(controls) do
+                        local color = controlColorName(control)
+                        if color and (color == "Red" or color == "Blue" or color == "Green" or color == "Purple") then
+                            byColor[color] = byColor[color] or control
+                            parts[#parts + 1] = tostring(control.Parent)
+                        end
+                    end
+                    if byColor.Red and byColor.Blue and byColor.Green and byColor.Purple then
+                        table.sort(parts)
+                        local signature = table.concat(parts, "|")
+                        if not signatures[signature] then
+                            signatures[signature] = true
+                            result[#result + 1] = {Root = descendant, Buttons = byColor}
+                        end
+                    end
+                end
+            end
+        end
+        return result
+    end
+
+    local function solveBreakoutCircles()
+        local roots = breakoutCircleRoots()
+        if #roots == 0 then
+            puzzleStatus = "Breakout: circles not found"
+            return false
+        end
+
+        local progressed = false
+        for index, entry in ipairs(roots) do
+            if not localSolved(entry.Root) then
+                for _, color in ipairs({"Red", "Blue", "Green", "Purple"}) do
+                    local before = progressFingerprint()
+                    puzzleStatus = "Breakout: circle " .. tostring(index) .. "/" .. tostring(#roots) .. " " .. color
+                    clickControl(entry.Buttons[color])
+                    if waitForSolved(before, entry.Root, 0.45) then
+                        progressed = true
+                        break
+                    end
+                    task.wait(1.05)
+                end
+            end
+        end
+        return progressed
+    end
+
+    local function solveBreakout()
+        if solveBreakoutArmory() then return true end
+        if solveBreakoutCircles() then
+            task.wait(0.08)
+            if solveBreakoutArmory() then return true end
+            return true
+        end
+        return false
+    end
+
     local function solveSpecialPuzzle(force)
         local mapName = currentMapName()
         local profile = mapProfiles[mapName]
@@ -3459,6 +3697,7 @@ return function(ctx)
             if puzzle == "ShapeWheel" then return solveShapeWheel() end
             if puzzle == "LightCircle" then return solveCampLightCircle() end
             if puzzle == "ReactorLevers" then return solveLabLevers() end
+            if puzzle == "BreakoutCircles" then return solveBreakout() end
             return false
         end)
         puzzleBusy = false
