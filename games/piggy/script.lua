@@ -5243,7 +5243,7 @@ end)()
                 objectiveVisualTarget = nil
             end
         end)
-        tab:CreateButton("Refresh objectives", refreshObjectiveState)
+        tab:CreateButton("Refresh objectives", Solver.refreshObjectiveState)
         tab:CreateButton("Solve map puzzle now", function()
             releaseAutomation()
             local solved = solveSpecialPuzzle(true)
@@ -5313,7 +5313,7 @@ end)()
                 autoInteract = false
                 scope:StopTask("autoGrab")
                 scope:StopTask("autoInteract")
-                scope:Loop("autoComplete", 0.05, autoCompleteStep)
+                scope:Loop("autoComplete", 0.05, Round.autoCompleteStep)
             else
                 scope:StopTask("autoComplete")
             end
@@ -5352,7 +5352,7 @@ end)()
                 scope:StopTask("autoInteract")
             end
         end)
-        rage:CreateButton("Complete one objective pass", autoCompleteStep)
+        rage:CreateButton("Complete one objective pass", Round.autoCompleteStep)
         rage:CreateSection("Bypasses")
         rage:CreateToggle("God mode", false, function(value)
             godMode = value
