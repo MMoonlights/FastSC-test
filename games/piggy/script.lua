@@ -205,6 +205,9 @@ return function(ctx)
     local automationTarget
     local automationDeadline = 0
     local automationGeneration = 0
+    local automationLastCorrection = 0
+    local automationLastMoveAt = 0
+    local automationLastTarget
 
     local function zeroCharacterVelocity(character)
         if not character then return end
@@ -235,14 +238,26 @@ return function(ctx)
         local root = character and character:FindFirstChild("HumanoidRootPart")
         local humanoid = character and character:FindFirstChildOfClass("Humanoid")
         if not root then return false end
+
+        local now = os.clock()
+        local sameTarget = automationLastTarget
+            and (automationLastTarget.Position - target.Position).Magnitude < 1.25
+            and now - automationLastMoveAt < 0.35
+
         automationActive = true
         automationTarget = target
-        automationDeadline = os.clock() + 2
+        automationDeadline = now + 2
         setAutomationCollision(true)
         if humanoid then scope:Set(humanoid, "AutoRotate", false) end
-        zeroCharacterVelocity(character)
-        pcall(function() character:PivotTo(target) end)
-        root.CFrame = target
+
+        if not sameTarget or (root.Position - target.Position).Magnitude > 5 then
+            zeroCharacterVelocity(character)
+            pcall(function() character:PivotTo(target) end)
+            root.CFrame = target
+            automationLastMoveAt = now
+            automationLastTarget = target
+        end
+
         return true
     end
 
@@ -276,21 +291,26 @@ return function(ctx)
 
     scope:Connect(RunService.PreSimulation, function()
         if not automationActive then return end
-        if automationDeadline > 0 and os.clock() > automationDeadline then
+        local now = os.clock()
+        if automationDeadline > 0 and now > automationDeadline then
             endAutomationMove()
             pickupBusy = false
             autoCompleteBusy = false
             return
         end
+
         local character = localPlayer.Character
         local root = character and character:FindFirstChild("HumanoidRootPart")
-        if not root then return end
-        zeroCharacterVelocity(character)
-        if automationTarget then
+        if not root or not automationTarget then return end
+
+        -- Do not CFrame-lock every frame. Only correct a real server/physics knockback.
+        local drift = (root.Position - automationTarget.Position).Magnitude
+        if drift > 7 and now - automationLastCorrection >= 0.12 then
+            automationLastCorrection = now
+            zeroCharacterVelocity(character)
             pcall(function() character:PivotTo(automationTarget) end)
             root.CFrame = automationTarget
         end
-        setAutomationCollision(true)
     end)
 
     local function hasAncestorName(instance, word)
