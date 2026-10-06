@@ -3751,6 +3751,77 @@ return function(ctx)
         return false
     end
 
+
+    local function solveHuntBookPuzzle()
+        local controls, root = groupedControls(3, {"book", "library", "shelf"}, false)
+        controls = uniqueControls(controls)
+        if #controls < 3 then return false end
+        controls = compactSubset(controls, 3)
+        if #controls ~= 3 then return false end
+
+        local before = progressFingerprint()
+        for code = 0, 26 do
+            local value = code
+            local sequence = {}
+            for index = 1, 3 do
+                sequence[index] = (value % 3) + 1
+                value = math.floor(value / 3)
+            end
+
+            puzzleStatus = "The Hunt: library " .. tostring(code + 1) .. "/27"
+            for _, controlIndex in ipairs(sequence) do
+                clickControl(controls[controlIndex])
+                task.wait(0.02)
+            end
+
+            if waitForSolved(before, root, 0.16) then return true end
+            task.wait(0.02)
+        end
+        return false
+    end
+
+    local function solveHuntDials()
+        local controls, root = groupedControls(3, {"valve", "dial", "cool", "engine", "time"}, false)
+        controls = uniqueControls(controls)
+        if #controls < 3 then return false end
+        controls = compactSubset(controls, 3)
+        if #controls ~= 3 then return false end
+
+        puzzleStatus = "The Hunt: cooling dials"
+        return cyclePuzzleControls(controls, 4, 64, root)
+    end
+
+    local function solveHuntCoordinates()
+        local raw, root = groupedControls(6, {"coordinate", "coord", "time", "machine", "x", "y", "z"}, true)
+        if #raw < 3 then
+            raw, root = groupedControls(3, {"coordinate", "coord", "time", "machine"}, true)
+        end
+        local controls = collapseSlotControls(raw, 3)
+        if #controls ~= 3 then return false end
+
+        puzzleStatus = "The Hunt: coordinates"
+        return cyclePuzzleControls(controls, 10, 1000, root)
+    end
+
+    local function solveHuntVault()
+        local raw, root = groupedControls(3, {"vault", "ring", "safe", "button"}, false)
+        raw = uniqueControls(raw)
+        if #raw < 3 then return false end
+        local controls = compactSubset(raw, 3)
+        if #controls ~= 3 then return false end
+
+        puzzleStatus = "The Hunt: vault"
+        return cyclePuzzleControls(controls, 10, 1000, root)
+    end
+
+    local function solveHuntSequence()
+        if solveHuntVault() then return true end
+        if solveHuntCoordinates() then return true end
+        if solveHuntDials() then return true end
+        if solveHuntBookPuzzle() then return true end
+        return false
+    end
+
     local function solveSpecialPuzzle(force)
         local mapName = currentMapName()
         local profile = mapProfiles[mapName]
@@ -3770,6 +3841,7 @@ return function(ctx)
             if puzzle == "LightCircle" then return solveCampLightCircle() end
             if puzzle == "ReactorLevers" then return solveLabLevers() end
             if puzzle == "BreakoutCircles" then return solveBreakout() end
+            if puzzle == "HuntSequence" then return solveHuntSequence() end
             return false
         end)
         puzzleBusy = false
