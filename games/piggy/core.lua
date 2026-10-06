@@ -42,6 +42,7 @@ function Core.new(ctx)
         Running=false, Busy=false, Finished=false, Map=nil, MapName="Unknown",
         LastStatus="idle", LastTarget=nil, Generation=0,
         HoldUntil=0, HoldTarget=nil, HoldConnection=nil,
+        FlightEnabled=false, FlightConnection=nil, FlightPosition=nil,
     }, Core)
 end
 
@@ -149,9 +150,69 @@ function Core:FindItem(id)
     return best
 end
 
+function Core:SetFlight(enabled)
+    self.FlightEnabled=enabled==true
+    if not self.FlightEnabled then
+        self.FlightPosition=nil
+        if self.FlightConnection then
+            self.FlightConnection:Disconnect()
+            self.FlightConnection=nil
+        end
+        return
+    end
+
+    local char=self.Player.Character
+    local root=char and char:FindFirstChild("HumanoidRootPart")
+    if root then self.FlightPosition=root.CFrame end
+    if self.FlightConnection then return end
+
+    self.FlightConnection=RunService.PreSimulation:Connect(function()
+        if not self.FlightEnabled then return end
+        local character=self.Player.Character
+        local hrp=character and character:FindFirstChild("HumanoidRootPart")
+        local hum=character and character:FindFirstChildOfClass("Humanoid")
+        if not hrp then return end
+
+        hrp.AssemblyLinearVelocity=Vector3.zero
+        hrp.AssemblyAngularVelocity=Vector3.zero
+
+        local target=self.HoldTarget or self.FlightPosition
+        if target then
+            local drift=(hrp.Position-target.Position).Magnitude
+            if drift>0.15 then
+                pcall(function() character:PivotTo(target) end)
+            end
+        else
+            self.FlightPosition=hrp.CFrame
+        end
+
+        if hum then
+            hum:ChangeState(Enum.HumanoidStateType.Physics)
+        end
+    end)
+end
+
+function Core:SetFlightPosition(cf)
+    self.FlightPosition=cf
+    if self.FlightEnabled then
+        local char=self.Player.Character
+        local root=char and char:FindFirstChild("HumanoidRootPart")
+        if root then
+            root.AssemblyLinearVelocity=Vector3.zero
+            root.AssemblyAngularVelocity=Vector3.zero
+            pcall(function() char:PivotTo(cf) end)
+        end
+    end
+end
+
 function Core:StopHold()
     self.HoldUntil=0
     self.HoldTarget=nil
+    if self.FlightEnabled then
+        local char=self.Player.Character
+        local root=char and char:FindFirstChild("HumanoidRootPart")
+        if root then self.FlightPosition=root.CFrame end
+    end
     if self.HoldConnection then
         self.HoldConnection:Disconnect()
         self.HoldConnection=nil
@@ -212,6 +273,7 @@ function Core:MoveTo(cf,holdDuration)
     if not root then return false end
 
     self.LastTarget=cf
+    self.FlightPosition=cf
     root.AssemblyLinearVelocity=Vector3.zero
     root.AssemblyAngularVelocity=Vector3.zero
     pcall(function() char:PivotTo(cf) end)
