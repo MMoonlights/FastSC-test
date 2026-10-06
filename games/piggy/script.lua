@@ -465,11 +465,12 @@ return function(ctx)
         },
         Metro = {
             Gates = {
-                BlueKeycard = {Present = {"Coin"}},
+                BlueKeycard = {Present = {"Coin"}, Active = {"Coin"}},
+                WhiteKey = {Active = {"BlueKeycard"}},
             },
             Depends = {
                 BlueKeycard = {"Coin"},
-                WhiteKey = {"BlueKeycard", "Hammer", "Wrench"},
+                WhiteKey = {"BlueKeycard"},
             },
             Counters = {
                 Coin = 2,
@@ -481,13 +482,18 @@ return function(ctx)
         },
         Carnival = {
             Gates = {
-                Hammer = {Present = {"Mallet"}},
-                KeyCode = {Present = {"WaterGun"}},
+                Mallet = {Active = {"YellowKey"}},
+                Hammer = {Present = {"Mallet"}, Active = {"Mallet"}},
+                WaterGun = {Active = {"BlueKey", "Wrench"}},
+                KeyCode = {Present = {"WaterGun"}, Active = {"WaterGun"}},
+                WhiteKey = {Active = {"OrangeKey"}},
             },
             Depends = {
+                Mallet = {"YellowKey"},
                 Hammer = {"Mallet"},
+                WaterGun = {"BlueKey", "Wrench"},
                 KeyCode = {"WaterGun"},
-                WhiteKey = {"OrangeKey", "Hammer", "Wrench", "KeyCode", "Plank"},
+                WhiteKey = {"OrangeKey"},
             },
             Priority = {
                 BlueKey = 10, GreenKey = 15, RedKey = 20, YellowKey = 25, OrangeKey = 30,
@@ -509,10 +515,15 @@ return function(ctx)
         },
         Mall = {
             Gates = {
-                WhiteKey = {Present = {"Coin"}},
+                GreenKeycard = {Active = {"Wrench"}},
+                Mirror = {Active = {"GreenKeycard"}},
+                WhiteKey = {Present = {"Coin"}, Active = {"Coin"}},
             },
             Depends = {
-                WhiteKey = {"Coin", "Crowbar", "Wrench", "Mirror", "Plank", "GreenKeycard"},
+                GreenKeycard = {"Wrench"},
+                Mirror = {"GreenKeycard"},
+                Coin = {"Crowbar", "Mirror"},
+                WhiteKey = {"Coin"},
             },
             Counters = {
                 Coin = 2,
@@ -595,10 +606,12 @@ return function(ctx)
             },
         },
         Refinery = {
+            Gates = {
+                WhiteKey = {Active = {"PurpleKey"}},
+            },
             Depends = {
                 Screwdriver = {"RedKey"},
-                WhiteKey = {"Scissors", "GreenKey", "RedKey", "BlueKey", "YellowKey",
-                    "Screwdriver", "Carrot", "GreenKeycard", "Battery", "OrangeKey", "PurpleKey"},
+                WhiteKey = {"PurpleKey", "OrangeKey", "Scissors", "GreenKey", "Carrot"},
             },
             Priority = {
                 Scissors = 10, GreenKey = 15, BlueKey = 20, RedKey = 25, YellowKey = 30,
@@ -607,11 +620,14 @@ return function(ctx)
             },
         },
         SafePlace = {
+            Gates = {
+                Blowtorch = {Active = {"PurpleKey"}},
+                WhiteKey = {Active = {"YellowKey"}},
+            },
             Depends = {
-                Hammer = {"Screwdriver", "Ladder", "ElevatorKey"},
-                Blowtorch = {"FireExtinguisher", "Screwdriver", "Ladder", "ElevatorKey"},
-                WhiteKey = {"Screwdriver", "Ladder", "ElevatorKey", "YellowKey",
-                    "FireExtinguisher", "Hammer", "Blowtorch"},
+                YellowKey = {"ElevatorKey"},
+                Blowtorch = {"PurpleKey", "FireExtinguisher", "Screwdriver", "Ladder"},
+                WhiteKey = {"YellowKey"},
             },
             Priority = {
                 Screwdriver = 10, Ladder = 15, OrangeKey = 18, GreenKey = 20, RedKey = 22,
@@ -621,12 +637,13 @@ return function(ctx)
         },
         Sewers = {
             Gates = {
-                Mop = {Present = {"WhiteGear"}},
-                WhiteKey = {Present = {"Mop"}},
+                Mop = {Present = {"WhiteGear"}, Active = {"WhiteGear", "Screwdriver", "YellowKey"}},
+                WhiteKey = {Present = {"Mop"}, Active = {"Mop"}},
             },
             Depends = {
-                Mop = {"GreenKey", "OrangeKey", "Plank", "WhiteGear", "Screwdriver", "YellowKey"},
-                WhiteKey = {"Mop", "Screwdriver"},
+                WhiteGear = {"Screwdriver"},
+                Mop = {"GreenKey", "WhiteGear", "Screwdriver", "YellowKey"},
+                WhiteKey = {"Mop"},
             },
             Counters = {
                 WhiteGear = 2,
@@ -647,9 +664,13 @@ return function(ctx)
             },
         },
         Port = {
+            Gates = {
+                Plank = {Active = {"PurpleKey"}},
+                GrapplingHook = {Active = {"YellowKey"}},
+            },
             Depends = {
-                GrapplingHook = {"RedKey"},
-                Battery = {"Plank", "GrapplingHook", "Shovel"},
+                Plank = {"PurpleKey"},
+                GrapplingHook = {"RedKey", "YellowKey"},
             },
             Counters = {
                 Battery = 4,
@@ -681,13 +702,15 @@ return function(ctx)
             Puzzle = "RomanCode",
             PuzzleBefore = {"WhiteKey"},
             Gates = {
+                BlueKey = {Active = {"PurpleKey"}},
                 Hammer = {Active = {"OrangeKey"}},
-                WhiteKey = {Active = {"PurpleKey", "GreenKey"}},
+                WhiteKey = {Active = {"YellowKey", "GreenKey", "Plank"}},
             },
             Depends = {
+                BlueKey = {"PurpleKey"},
                 Hammer = {"OrangeKey"},
                 Plank = {"BlueKey", "Hammer"},
-                WhiteKey = {"PurpleKey", "GreenKey", "Plank"},
+                WhiteKey = {"YellowKey", "GreenKey", "Plank"},
             },
             Priority = {
                 BlueKey = 10, GreenKey = 15, OrangeKey = 20, RedKey = 25,
