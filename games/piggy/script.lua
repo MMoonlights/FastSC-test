@@ -4631,7 +4631,7 @@ end)()
         if #eventParts == 0 then return false end
 
         local ok = pcall(function()
-            for _ = 1, 4 do
+            for _ = 1, 2 do
                 if not autoComplete or not Solver.objectiveNeedsActivation(objective) then break end
 
                 for _, eventPart in ipairs(eventParts) do
@@ -4672,7 +4672,7 @@ end)()
                     if prompt and fireproximityprompt then pcall(fireproximityprompt, prompt) end
 
                     local interactionBefore = before
-                    local waitDeadline = os.clock() + 0.18
+                    local waitDeadline = os.clock() + 0.28
                     repeat
                         task.wait(0.025)
                         if not Solver.objectiveNeedsActivation(objective)
