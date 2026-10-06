@@ -1,3 +1,18 @@
+solveCodePanel, solveSpecialPuzzle, getPuzzleStatus, progressFingerprint = (function()
+puzzleBusy = false
+puzzleStatus = "idle"
+puzzleRetryAt = 0
+solvedPuzzles = {}
+
+canonicalRoots = {
+    DigitCode = {"digitcodepad", "digitcode", "numbercodepad", "codepad"},
+    ColorCode = {"colorcodepad", "colorcode"},
+    RomanCode = {"romannumeralpuzzlemain", "romannumeralpuzzle", "romannumeral"},
+    ShapeWheel = {"shapecodewheel", "shapewheel", "shapecode"},
+    LightCircle = {"lightcirclepuzzle", "lightcircle"},
+    ReactorGrid = {"ninesquarespuzzle", "ninesquares", "leverpuzzle"},
+}
+
 function shortValue(instance)
     if instance:IsA("StringValue") then return tostring(instance.Value) end
     if instance:IsA("IntValue") or instance:IsA("NumberValue") then return tostring(instance.Value) end
