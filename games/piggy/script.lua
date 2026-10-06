@@ -3950,7 +3950,9 @@ return function(ctx)
         return puzzleStatus
     end, progressFingerprint
 end)()
-    local function isFreeProgressInteraction(interactive)
+    local Solver = {}
+
+    function Solver.isFreeProgressInteraction(interactive)
         if not interactive or not interactive.Parent then return false end
         if itemObjectFrom(interactive) or belongsToItem(interactive) then return false end
         local host = interactionHost(interactive)
@@ -3993,7 +3995,7 @@ end)()
         return not cooldown or cooldown <= os.clock()
     end
 
-    local function runFreeInteractionStep()
+    function Solver.runFreeInteractionStep()
         local root = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
         if not root then return false end
         local best
@@ -4001,7 +4003,7 @@ end)()
         local bestDistance = math.huge
 
         for interactive in pairs(interactives) do
-            if isFreeProgressInteraction(interactive) then
+            if Solver.isFreeProgressInteraction(interactive) then
                 local host = interactionHost(interactive)
                 local part = getPart(host) or getPart(interactive)
                 if part then
@@ -4036,7 +4038,7 @@ end)()
         return true
     end
 
-    local function targetFromRequirement(value)
+    function Solver.targetFromRequirement(value)
         local host = requirementHost(value)
         if host and getPart(host) then return host end
 
@@ -4058,7 +4060,7 @@ end)()
         return fallback
     end
 
-    local function readableTargetName(id, target)
+    function Solver.readableTargetName(id, target)
         if targetNames[id] then return targetNames[id] end
         if target then
             local name = tostring(target.Name)
@@ -4187,7 +4189,7 @@ end)()
             ItemName = displayNames[id] or id,
             Target = target,
             Part = part,
-            TargetName = readableTargetName(id, target),
+            TargetName = Solver.readableTargetName(id, target),
             Requirement = nil,
             Synthetic = true,
             ParentId = parentId,
@@ -4222,7 +4224,7 @@ end)()
         end
     end
 
-    local function collectObjectives()
+    function Solver.collectObjectives()
         Synth.reconcileSyntheticState()
         local result = {}
         local seen = {}
@@ -4230,7 +4232,7 @@ end)()
             if value.Parent and isObjectiveRequirement(value) and not belongsToItem(value) then
                 local id = idFromText(value.Value)
                 if id then
-                    local target = targetFromRequirement(value)
+                    local target = Solver.targetFromRequirement(value)
                     local part = target and getPart(target)
                     if target and part then
                         local key = tostring(target) .. ":" .. id
@@ -4241,7 +4243,7 @@ end)()
                                 ItemName = displayNames[id] or id:gsub("(%l)(%u)", "%1 %2"),
                                 Target = target,
                                 Part = part,
-                                TargetName = readableTargetName(id, target),
+                                TargetName = Solver.readableTargetName(id, target),
                                 Requirement = value,
                             }
                         end
@@ -4311,19 +4313,19 @@ end)()
         KeyCode = 30,
     }
 
-    local function isLockItem(id)
+    function Solver.isLockItem(id)
         local value = tostring(id or "")
         return value:find("Key", 1, true) ~= nil
             or value:find("Keycard", 1, true) ~= nil
             or id == "ElevatorKey"
     end
 
-    local function objectiveDistance(a, b)
+    function Solver.objectiveDistance(a, b)
         if not a or not b or not a.Part or not b.Part then return math.huge end
         return (a.Part.Position - b.Part.Position).Magnitude
     end
 
-    local function blockingObjectiveFor(objective, objectives)
+    function Solver.blockingObjectiveFor(objective, objectives)
         local profile = mapProfiles[currentMapName()]
         local synthetic = profile and profile.Synthetic and profile.Synthetic[objective.Id]
         if synthetic then
@@ -4349,15 +4351,15 @@ end)()
             end
         end
 
-        if not isLockItem(objective.Id) then return nil end
+        if not Solver.isLockItem(objective.Id) then return nil end
 
         local best
         local bestPriority = math.huge
         for _, candidate in ipairs(objectives) do
             if candidate ~= objective then
                 local priority = blockerPriority[candidate.Id]
-                if priority and objectiveDistance(objective, candidate) <= 18 then
-                    if objectiveStillActive == nil or objectiveStillActive(candidate) then
+                if priority and Solver.objectiveDistance(objective, candidate) <= 18 then
+                    if objectiveStillActive == nil or Solver.objectiveStillActive(candidate) then
                         if priority < bestPriority then
                             best = candidate
                             bestPriority = priority
@@ -4369,33 +4371,33 @@ end)()
         return best
     end
 
-    local function profilePriority(id)
+    function Solver.profilePriority(id)
         local profile = mapProfiles[currentMapName()]
         local priority = profile and profile.Priority and profile.Priority[id]
         return priority or blockerPriority[id] or 100
     end
 
-    local function chooseObjective(objectives)
+    function Solver.chooseObjective(objectives)
         local root = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
         local best
         local bestScore = math.huge
         for _, objective in ipairs(objectives) do
-            local blocker = blockingObjectiveFor(objective, objectives)
+            local blocker = Solver.blockingObjectiveFor(objective, objectives)
             local owned = findOwnedById(objective.Id)
             local worldItem, worldDistance = findItemById(objective.Id)
             local score
             if blocker then
-                score = 1000000 + profilePriority(blocker.Id)
+                score = 1000000 + Solver.profilePriority(blocker.Id)
             elseif owned then
-                score = profilePriority(objective.Id)
+                score = Solver.profilePriority(objective.Id)
             elseif worldItem then
-                score = 200 + profilePriority(objective.Id) + (worldDistance or 0) * 0.01
+                score = 200 + Solver.profilePriority(objective.Id) + (worldDistance or 0) * 0.01
             else
                 score = 100000
                 if root and objective.Part then
                     score = score + (objective.Part.Position - root.Position).Magnitude
                 end
-                score = score + profilePriority(objective.Id)
+                score = score + Solver.profilePriority(objective.Id)
             end
             local cooldown = objective.Requirement and objectiveCooldowns[objective.Requirement]
             if cooldown and cooldown > os.clock() then score = score + 50000 end
@@ -4407,12 +4409,12 @@ end)()
         return best, bestScore
     end
 
-    local function objectiveText(objective)
+    function Solver.objectiveText(objective)
         if not objective then return "Current objective: none detected" end
         return "Current objective: " .. objective.ItemName .. " -> " .. objective.TargetName
     end
 
-    local function remainingText(objectives)
+    function Solver.remainingText(objectives)
         if #objectives == 0 then return "Items needed: none, exit is next" end
         local names = {}
         local seen = {}
@@ -4426,10 +4428,10 @@ end)()
         return "Items needed: " .. table.concat(names, ", ")
     end
 
-    local function refreshObjectiveState()
+    function Solver.refreshObjectiveState()
         local ok, objectives, objective = pcall(function()
-            local found = collectObjectives()
-            local selected = chooseObjective(found)
+            local found = Solver.collectObjectives()
+            local selected = Solver.chooseObjective(found)
             return found, selected
         end)
 
@@ -4447,8 +4449,8 @@ end)()
             objectiveMapLabel:Set("Map: " .. currentMapName()
                 .. " | active objectives: " .. tostring(#objectives))
         end
-        if objectiveCurrentLabel then objectiveCurrentLabel:Set(objectiveText(currentObjective)) end
-        if objectiveNeededLabel then objectiveNeededLabel:Set(remainingText(objectives)) end
+        if objectiveCurrentLabel then objectiveCurrentLabel:Set(Solver.objectiveText(currentObjective)) end
+        if objectiveNeededLabel then objectiveNeededLabel:Set(Solver.remainingText(objectives)) end
         if objectiveStatusLabel then
             if not currentObjective then
                 local profile = mapProfiles[currentMapName()]
@@ -4468,7 +4470,7 @@ end)()
         return objectives, currentObjective
     end
 
-    local function equipRequired(id)
+    function Solver.equipRequired(id)
         local object = findOwnedById(id)
         if not object then
             local worldItem = findItemById(id)
@@ -4493,7 +4495,7 @@ end)()
         return object
     end
 
-    local function objectiveStillActive(objective)
+    function Solver.objectiveStillActive(objective)
         local requirement = objective and objective.Requirement
         local map = currentMapModel()
         return requirement
@@ -4503,7 +4505,7 @@ end)()
             and idFromText(requirement.Value) == objective.Id
     end
 
-    local function objectiveEventParts(objective)
+    function Solver.objectiveEventParts(objective)
         local result = {}
         local seen = {}
 
@@ -4565,15 +4567,15 @@ end)()
         return result
     end
 
-    local function objectiveNeedsActivation(objective)
+    function Solver.objectiveNeedsActivation(objective)
         if not objective then return false end
         if objective.Synthetic then
             return not syntheticCompleted[objective.Id]
         end
-        return objectiveStillActive(objective)
+        return Solver.objectiveStillActive(objective)
     end
 
-    local function activateObjective(objective)
+    function Solver.activateObjective(objective)
         if not objective or not objective.Target or not objective.Target.Parent then return false end
 
         local character = localPlayer.Character
@@ -4588,7 +4590,7 @@ end)()
         end
 
         local handle = tool and (tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart", true))
-        local eventParts = objectiveEventParts(objective)
+        local eventParts = Solver.objectiveEventParts(objective)
         local rootPart = character:FindFirstChild("HumanoidRootPart")
         if rootPart and #eventParts > 1 then
             table.sort(eventParts, function(a, b)
@@ -4607,11 +4609,11 @@ end)()
 
         local ok = pcall(function()
             for _ = 1, 4 do
-                if not autoComplete or not objectiveNeedsActivation(objective) then break end
+                if not autoComplete or not Solver.objectiveNeedsActivation(objective) then break end
 
                 for _, eventPart in ipairs(eventParts) do
                     if not autoComplete then break end
-                    if not objectiveNeedsActivation(objective) then break end
+                    if not Solver.objectiveNeedsActivation(objective) then break end
                     if not eventPart.Parent then continue end
 
                     beginAutomationMove(eventPart.CFrame + eventPart.CFrame.LookVector * -1.5 + Vector3.new(0, 1, 0))
@@ -4641,21 +4643,21 @@ end)()
                     local waitDeadline = os.clock() + 0.18
                     repeat
                         task.wait(0.025)
-                        if not objectiveNeedsActivation(objective)
+                        if not Solver.objectiveNeedsActivation(objective)
                             or not findOwnedById(objective.Id)
                             or progressFingerprint() ~= interactionBefore then
                             break
                         end
                     until os.clock() >= waitDeadline
 
-                    if not objectiveNeedsActivation(objective)
+                    if not Solver.objectiveNeedsActivation(objective)
                         or not findOwnedById(objective.Id)
                         or progressFingerprint() ~= interactionBefore then
                         break
                     end
                 end
 
-                if not objectiveNeedsActivation(objective)
+                if not Solver.objectiveNeedsActivation(objective)
                     or not findOwnedById(objective.Id)
                     or progressFingerprint() ~= before then
                     break
@@ -4664,7 +4666,7 @@ end)()
         end)
 
         task.wait(0.05)
-        local completed = objective.Synthetic and false or not objectiveStillActive(objective)
+        local completed = objective.Synthetic and false or not Solver.objectiveStillActive(objective)
         local toolConsumed = tool and (not tool.Parent or tool.Parent ~= toolParent)
             and not findOwnedById(objective.Id)
 
@@ -4916,7 +4918,7 @@ end)()
         autoCompleteBusy = true
 
         local ok, errorMessage = pcall(function()
-            local objectives, objective = refreshObjectiveState()
+            local objectives, objective = Solver.refreshObjectiveState()
 
             local profile = mapProfiles[currentMapName()]
             local puzzleBefore = profile and profile.PuzzleBefore
@@ -4925,13 +4927,13 @@ end)()
             if #objectives == 0 or puzzleIsNext then
                 if solveSpecialPuzzle() then
                     task.wait(0.03)
-                    refreshObjectiveState()
+                    Solver.refreshObjectiveState()
                     return
                 end
                 if #objectives == 0 then
-                    if runFreeInteractionStep() then
+                    if Solver.runFreeInteractionStep() then
                         task.wait(0.03)
-                        refreshObjectiveState()
+                        Solver.refreshObjectiveState()
                     else
                         Round.autoEscapeStep()
                     end
@@ -4941,19 +4943,19 @@ end)()
 
             if not objective then return end
 
-            local required = equipRequired(objective.Id)
+            local required = Solver.equipRequired(objective.Id)
             if required then
                 if objective.Synthetic and objective.NeedsTarget then
                     local target = Synth.syntheticTarget(objective.Id)
                     if target and getPart(target) then
                         objective.Target = target
                         objective.Part = getPart(target)
-                        objective.TargetName = readableTargetName(objective.Id, target)
+                        objective.TargetName = Solver.readableTargetName(objective.Id, target)
                         objective.NeedsTarget = nil
                     end
                 end
 
-                local completed, progressed = activateObjective(objective)
+                local completed, progressed = Solver.activateObjective(objective)
                 if objective.Requirement then
                     if progressed then
                         objectiveFailures[objective.Requirement] = nil
@@ -4966,16 +4968,16 @@ end)()
                 end
                 if not completed and not progressed then
                     if not solveSpecialPuzzle() then
-                        runFreeInteractionStep()
+                        Solver.runFreeInteractionStep()
                     end
                 end
             else
                 if not solveSpecialPuzzle() then
-                    runFreeInteractionStep()
+                    Solver.runFreeInteractionStep()
                 end
             end
 
-            refreshObjectiveState()
+            Solver.refreshObjectiveState()
         end)
 
         releaseAutomation()
@@ -5216,20 +5218,20 @@ end)()
             if objectivePuzzleLabel and getPuzzleStatus then
                 objectivePuzzleLabel:Set("Puzzle: " .. tostring(getPuzzleStatus()))
             end
-            if solved then refreshObjectiveState() end
+            if solved then Solver.refreshObjectiveState() end
         end)
         tab:CreateButton("Teleport to required item", function()
-            local _, objective = refreshObjectiveState()
+            local _, objective = Solver.refreshObjectiveState()
             if not objective then return end
             local item = findItemById(objective.Id)
             if item then teleportItem(item) end
         end)
         tab:CreateButton("Teleport to objective target", function()
-            local _, objective = refreshObjectiveState()
+            local _, objective = Solver.refreshObjectiveState()
             local part = objective and getPart(objective.Target)
             if part then Common.Root().CFrame = part.CFrame + Vector3.new(0, 2.5, 0) end
         end)
-        refreshObjectiveState()
+        Solver.refreshObjectiveState()
     end
 
     function Actions.setupPlayerTab(tab, rage)
@@ -5366,7 +5368,7 @@ end)()
     end)
 
     scope:Loop("objectiveHelper", 0.1, function()
-        refreshObjectiveState()
+        Solver.refreshObjectiveState()
         if objectivePuzzleLabel and getPuzzleStatus then
             objectivePuzzleLabel:Set("Puzzle: " .. tostring(getPuzzleStatus()))
         end
