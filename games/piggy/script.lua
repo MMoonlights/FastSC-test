@@ -105,7 +105,14 @@ return function(ctx)
         "Distraction",
         "Breakout",
         "Mansion",
+        "DistortedHoliday",
+        "Distorted Holiday",
+        "HolidaySpirit",
+        "Holiday Spirit",
+        "The Hunt",
     }
+
+    local dynamicMapCache
 
     local function currentMapModel()
         for _, name in ipairs(mapNames) do
@@ -115,8 +122,39 @@ return function(ctx)
         for _, child in ipairs(workspace:GetChildren()) do
             local lower = string.lower(child.Name)
             for _, name in ipairs(mapNames) do
-                if lower == string.lower(name) then return child, name end
+                if lower == string.lower(name) then
+                    dynamicMapCache = child
+                    return child, name
+                end
             end
+        end
+
+        if dynamicMapCache and dynamicMapCache.Parent == workspace then
+            return dynamicMapCache, dynamicMapCache.Name
+        end
+
+        local best
+        local bestScore = 0
+        for _, child in ipairs(workspace:GetChildren()) do
+            if (child:IsA("Model") or child:IsA("Folder"))
+                and not Players:GetPlayerFromCharacter(child)
+                and child.Name ~= "PiggyNPC" then
+                local score = 0
+                if child:FindFirstChild("Events") or child:FindFirstChild("events") then score += 8 end
+                if child:FindFirstChild("ItemFolder") or child:FindFirstChild("ItemFolder1")
+                    or child:FindFirstChild("Items") then score += 5 end
+                if child:FindFirstChild("ToolRequired", true) then score += 6 end
+                if child:FindFirstChild("ItemPickupScript", true)
+                    or child:FindFirstChild("NewItemPickupScript", true) then score += 5 end
+                if score > bestScore then
+                    best = child
+                    bestScore = score
+                end
+            end
+        end
+        if best and bestScore >= 6 then
+            dynamicMapCache = best
+            return best, best.Name
         end
     end
 
