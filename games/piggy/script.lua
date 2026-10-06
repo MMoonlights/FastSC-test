@@ -3762,6 +3762,8 @@ end)()
 
         local handle = tool and (tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart", true))
         local eventParts = objectiveEventParts(objective)
+        local before = progressFingerprint()
+        local toolParent = tool and tool.Parent
         if #eventParts == 0 then return false end
 
         local ok = pcall(function()
@@ -3803,8 +3805,11 @@ end)()
         humanoid.Jump = false
         task.wait(0.05)
         local completed = not objectiveStillActive(objective)
+        local toolConsumed = tool and (not tool.Parent or tool.Parent ~= toolParent)
+            and not findOwnedById(objective.Id)
+        local progressed = completed or toolConsumed or progressFingerprint() ~= before
         endAutomationMove()
-        return ok and completed
+        return ok and completed, ok and progressed
     end
 
     local function isEscapeRelatedPart(part)
@@ -3933,18 +3938,18 @@ end)()
 
             local required = equipRequired(objective.Id)
             if required then
-                local completed = activateObjective(objective)
+                local completed, progressed = activateObjective(objective)
                 if objective.Requirement then
-                    if completed then
+                    if progressed then
                         objectiveFailures[objective.Requirement] = nil
-                        objectiveCooldowns[objective.Requirement] = os.clock() + 0.08
+                        objectiveCooldowns[objective.Requirement] = os.clock() + (completed and 0.08 or 0.12)
                     else
                         local failures = math.min((objectiveFailures[objective.Requirement] or 0) + 1, 6)
                         objectiveFailures[objective.Requirement] = failures
                         objectiveCooldowns[objective.Requirement] = os.clock() + math.min(0.35 * (2 ^ (failures - 1)), 4)
                     end
                 end
-                if not completed then
+                if not completed and not progressed then
                     if not solveSpecialPuzzle() then
                         runFreeInteractionStep()
                     end
