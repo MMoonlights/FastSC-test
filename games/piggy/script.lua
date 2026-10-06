@@ -1028,14 +1028,14 @@ return function(ctx)
     local function refreshRequirementsNear(instance)
         local current = instance and instance.Parent
         local seen = {}
-        for _ = 1, 5 do
+        for _ = 1, 6 do
             if not current or current == workspace then break end
-            for _, descendant in ipairs(current:GetDescendants()) do
-                if descendant:IsA("StringValue") and not seen[descendant] then
-                    seen[descendant] = true
-                    if requirements[descendant] or aliases[token(descendant.Value)] then
-                        trackRequirement(descendant)
-                        updateRequirement(descendant)
+            for _, child in ipairs(current:GetChildren()) do
+                if child:IsA("StringValue") and not seen[child] then
+                    seen[child] = true
+                    if requirements[child] or aliases[token(child.Value)] then
+                        trackRequirement(child)
+                        updateRequirement(child)
                     end
                 end
             end
