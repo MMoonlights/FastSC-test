@@ -6,6 +6,11 @@ local uiUrl = "https://raw.githubusercontent.com/MMoonlights/UI/refs/heads/main/
 local rootFolder = "FastSC-test"
 local sourceCache = env.FastSCSourceCache or {}
 env.FastSCSourceCache = sourceCache
+for key in pairs(sourceCache) do
+    if string.sub(key, 1, 5) == "repo:" then
+        sourceCache[key] = nil
+    end
+end
 
 local function localPath(path)
     return rootFolder .. "/" .. path
@@ -37,7 +42,27 @@ local function source(path)
     if isfile and readfile and isfile(localPath(path)) then
         return readfile(localPath(path))
     end
-    return fetchUrl(repo .. path, "repo:" .. path, 15)
+
+    -- Repository Lua modules are development code and must not reuse a stale
+    -- in-memory source after re-execute. Keep the previous copy only as a
+    -- network-failure fallback.
+    local key = "repo:" .. path
+    local cached = sourceCache[key]
+    local lastError
+    for attempt = 1, 3 do
+        local ok, result = pcall(function()
+            local separator = string.find(repo .. path, "?", 1, true) and "&" or "?"
+            return game:HttpGet(repo .. path .. separator .. "v=" .. tostring(os.time()))
+        end)
+        if ok and type(result) == "string" and #result > 0 then
+            sourceCache[key] = {Source = result, Time = os.clock()}
+            return result
+        end
+        lastError = result
+        if attempt < 3 then task.wait(0.15 * attempt) end
+    end
+    if cached and cached.Source then return cached.Source end
+    error(lastError or ("Failed to fetch " .. repo .. path))
 end
 
 local function module(path)
