@@ -103,6 +103,11 @@ function Scope:AddRestore(callback)
     return callback
 end
 
+-- Backward-compatible cleanup alias for older cached feature modules.
+function Scope:Add(callback)
+    return self:AddRestore(callback)
+end
+
 function Scope:Spawn(key, callback)
     if not self.Alive then return nil end
     if key then self:StopTask(key) end
