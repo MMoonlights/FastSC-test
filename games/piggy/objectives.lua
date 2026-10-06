@@ -655,6 +655,77 @@ function Solver.objectiveStillActive(objective)
         and idFromText(requirement.Value) == objective.Id
 end
 
+function Solver.preciseRequirementPart(objective)
+    local requirement = objective and objective.Requirement
+    local target = objective and objective.Target
+    if not requirement or not requirement.Parent then return nil end
+
+    local host = requirementHost(requirement) or requirement.Parent
+    local targetPart = target and getPart(target) or nil
+    local best
+    local bestScore = -math.huge
+    local bestName
+
+    local function consider(part)
+        if not part or not part:IsA("BasePart") or not part.Parent then return end
+        if belongsToItem(part) or itemObjectFrom(part) then return end
+
+        local score = 0
+        local directRequired = part:FindFirstChild("ToolRequired")
+        if directRequired and directRequired:IsA("StringValue")
+            and idFromText(directRequired.Value) == objective.Id then
+            score += 1200
+        end
+
+        if requirement.Parent == part then score += 1000 end
+        if host then
+            if host == part then
+                score += 500
+            elseif host:IsA("Instance") and part:IsDescendantOf(host) then
+                score += 360
+            end
+        end
+
+        if part:FindFirstChildWhichIsA("ClickDetector", true)
+            or part:FindFirstChildWhichIsA("ProximityPrompt", true)
+            or part:FindFirstChildWhichIsA("TouchTransmitter", true) then
+            score += 260
+        end
+
+        if requirementEventMesh(part) then score += 220 end
+        if part == targetPart then score += 180 end
+
+        if targetPart then
+            score -= math.min((part.Position - targetPart.Position).Magnitude, 100) * 0.01
+        end
+
+        local fullName = tostring(part:GetFullName())
+        if score > bestScore or (score == bestScore and (not bestName or fullName < bestName)) then
+            best = part
+            bestScore = score
+            bestName = fullName
+        end
+    end
+
+    if requirement.Parent:IsA("BasePart") then consider(requirement.Parent) end
+
+    if host then
+        if host:IsA("BasePart") then consider(host) end
+        for _, descendant in ipairs(host:GetDescendants()) do
+            if descendant:IsA("BasePart") then consider(descendant) end
+        end
+    end
+
+    if target and target ~= host then
+        if target:IsA("BasePart") then consider(target) end
+        for _, descendant in ipairs(target:GetDescendants()) do
+            if descendant:IsA("BasePart") then consider(descendant) end
+        end
+    end
+
+    return best
+end
+
 function Solver.objectiveEventParts(objective)
     local result = {}
     local seen = {}
@@ -680,6 +751,12 @@ function Solver.objectiveEventParts(objective)
 
     local requirement = objective and objective.Requirement
     if requirement and requirement.Parent then
+        local precise = Solver.preciseRequirementPart(objective)
+        if precise then
+            add(precise)
+            return result
+        end
+
         if requirement.Parent:IsA("BasePart") then
             add(requirement.Parent)
         else
