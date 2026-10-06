@@ -464,9 +464,11 @@ return function(ctx)
         },
         Forest = {
             Gates = {
+                Wrench = {Active = {"YellowKey", "Plank"}},
                 WhiteKey = {Present = {"Torch"}, Active = {"Torch"}},
             },
             Depends = {
+                Wrench = {"YellowKey", "Plank"},
                 WhiteKey = {"Torch"},
             },
             Priority = {
@@ -475,7 +477,12 @@ return function(ctx)
             },
         },
         School = {
+            Gates = {
+                Hammer = {Active = {"RedKey"}},
+                GreenGear = {Active = {"Book"}},
+            },
             Depends = {
+                Hammer = {"RedKey"},
                 GreenGear = {"Book"},
             },
             Priority = {
@@ -553,11 +560,13 @@ return function(ctx)
         },
         Mall = {
             Gates = {
+                Wrench = {Active = {"YellowKey"}},
                 GreenKeycard = {Active = {"Wrench"}},
                 Mirror = {Active = {"GreenKeycard"}},
                 WhiteKey = {Present = {"Coin"}, Active = {"Coin"}},
             },
             Depends = {
+                Wrench = {"YellowKey"},
                 GreenKeycard = {"Wrench"},
                 Mirror = {"GreenKeycard"},
                 Coin = {"Crowbar", "Mirror"},
@@ -574,11 +583,13 @@ return function(ctx)
         },
         Outpost = {
             Gates = {
+                FireExtinguisher = {Active = {"YellowKey", "GreenKey"}},
                 Gas = {Active = {"FireExtinguisher"}},
                 TankBullet = {Active = {"Wrench"}},
                 BlueKeycard = {Present = {"Gas", "TankBullet"}, Active = {"Gas", "TankBullet"}},
             },
             Depends = {
+                FireExtinguisher = {"YellowKey", "GreenKey"},
                 Gas = {"FireExtinguisher"},
                 TankBullet = {"Wrench"},
                 BlueKeycard = {"Gas", "TankBullet"},
@@ -690,10 +701,12 @@ return function(ctx)
         },
         Sewers = {
             Gates = {
+                Screwdriver = {Active = {"Plank", "OrangeKey"}},
                 Mop = {Active = {"WhiteGear", "Screwdriver", "YellowKey"}},
                 WhiteKey = {Present = {"Mop"}, Active = {"Mop"}},
             },
             Depends = {
+                Screwdriver = {"Plank", "OrangeKey"},
                 Mop = {"GreenKey", "WhiteGear", "Screwdriver", "YellowKey"},
                 WhiteKey = {"Mop"},
             },
