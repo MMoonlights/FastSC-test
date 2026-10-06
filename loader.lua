@@ -261,6 +261,7 @@ loadGame = function(entry)
         Entry = entry,
         Mode = effectiveMode,
         Repo = repo,
+        Module = module,
         ReturnToChooser = function()
             showChooser()
         end,
@@ -330,6 +331,7 @@ local function loadUniversal()
         Entry = entry,
         Mode = "Default",
         Repo = repo,
+        Module = module,
         Reload = loadUniversal,
     }
 
