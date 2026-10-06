@@ -166,7 +166,7 @@ function Core:SetFlight(enabled)
     if root then self.FlightPosition=root.CFrame end
     if self.FlightConnection then return end
 
-    self.FlightConnection=RunService.PreSimulation:Connect(function()
+    self.FlightConnection=self.Scope:TrackConnection(RunService.PreSimulation:Connect(function()
         if not self.FlightEnabled then return end
         local character=self.Player.Character
         local hrp=character and character:FindFirstChild("HumanoidRootPart")
@@ -189,7 +189,7 @@ function Core:SetFlight(enabled)
         if hum then
             hum:ChangeState(Enum.HumanoidStateType.Physics)
         end
-    end)
+    end))
 end
 
 function Core:SetFlightPosition(cf)
@@ -343,5 +343,19 @@ function Core:Use(req)
     self:StopHold()
     return not self:RequirementActive(req)
 end
+
+function Core:ResetMotion()
+    self:StopHold()
+    self:SetFlight(false)
+    local char=self.Player.Character
+    local root=char and char:FindFirstChild("HumanoidRootPart")
+    local hum=char and char:FindFirstChildOfClass("Humanoid")
+    if root then
+        root.AssemblyLinearVelocity=Vector3.zero
+        root.AssemblyAngularVelocity=Vector3.zero
+    end
+    if hum then pcall(function() hum:ChangeState(Enum.HumanoidStateType.GettingUp) end) end
+end
+
 
 return Core
