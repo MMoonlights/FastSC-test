@@ -448,6 +448,12 @@ function Solver.chooseObjective(objectives)
         end
         local cooldown = objective.Requirement and objectiveCooldowns[objective.Requirement]
         if cooldown and cooldown > os.clock() then score = score + 50000 end
+
+        local pickupCooldown = not owned and pickupRetryAt[objective.Id]
+        if pickupCooldown and pickupCooldown > os.clock() then
+            score = score + 250000
+        end
+
         if score < bestScore then
             best = objective
             bestScore = score
@@ -508,6 +514,9 @@ function Solver.refreshObjectiveState()
             end
         elseif findOwnedById(currentObjective.Id) then
             objectiveStatusLabel:Set("Status: item owned, apply it to " .. currentObjective.TargetName)
+        elseif pickupRetryAt[currentObjective.Id] and pickupRetryAt[currentObjective.Id] > os.clock() then
+            local left = math.max(0, pickupRetryAt[currentObjective.Id] - os.clock())
+            objectiveStatusLabel:Set("Status: pickup retry in " .. string.format("%.1fs", left) .. " | " .. lastPickupStatus)
         elseif findItemById(currentObjective.Id) then
             objectiveStatusLabel:Set("Status: collect " .. currentObjective.ItemName .. " | pickup: " .. lastPickupStatus)
         else
@@ -519,29 +528,48 @@ end
 
 function Solver.equipRequired(id)
     local object = findOwnedById(id)
+
     if not object then
+        local retryAt = pickupRetryAt[id]
+        if retryAt and retryAt > os.clock() then
+            return nil
+        end
+
         local worldItem = findItemById(id)
         if worldItem then
             local picked = grabItem(worldItem, false, id)
             if picked then
-                task.wait(0.1)
+                pickupRetryAt[id] = nil
+                pickupFailuresById[id] = nil
+                task.wait(0.08)
                 object = findOwnedById(id)
+            else
+                local failures = math.min((pickupFailuresById[id] or 0) + 1, 5)
+                pickupFailuresById[id] = failures
+                pickupRetryAt[id] = os.clock() + math.min(0.35 * (2 ^ (failures - 1)), 2.8)
+                return nil
             end
         end
     end
+
     local character = localPlayer.Character
     local humanoid = character and character:FindFirstChildOfClass("Humanoid")
     if object and object:IsA("Tool") and humanoid and object.Parent ~= character then
         humanoid:EquipTool(object)
         task.wait(0.04)
-        local equipped = character:FindFirstChildWhichIsA("Tool")
-        if equipped and (itemId(equipped) == id or aliases[token(equipped.Name)] == id) then
+        local equipped = findOwnedById(id)
+        if equipped and equipped.Parent == character then
             object = equipped
         end
     end
+
+    if object then
+        pickupRetryAt[id] = nil
+        pickupFailuresById[id] = nil
+    end
+
     return object
 end
-
 function Solver.objectiveStillActive(objective)
     local requirement = objective and objective.Requirement
     local map = currentMapModel()
@@ -963,6 +991,8 @@ function Round.resetRoundAutomation()
     escapeAttempts = 0
     lastEscapeAttempt = 0
     syntheticCompleted = {}
+    pickupRetryAt = {}
+    pickupFailuresById = {}
     objectiveFailures = setmetatable({}, {__mode = "k"})
     objectiveCooldowns = setmetatable({}, {__mode = "k"})
     freeInteractionCooldowns = setmetatable({}, {__mode = "k"})
@@ -1021,6 +1051,11 @@ function Round.autoCompleteStep()
         end
 
         if not objective then return end
+
+        local retryAt = pickupRetryAt[objective.Id]
+        if retryAt and retryAt > os.clock() and not findOwnedById(objective.Id) then
+            return
+        end
 
         local required = Solver.equipRequired(objective.Id)
         if required then
