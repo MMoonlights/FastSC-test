@@ -516,11 +516,14 @@ return function(ctx)
     local mapProfiles = {
         House = {
             Gates = {
-                WhiteKey = {Present = {"RedGear", "GreenGear"}, Active = {"RedGear", "GreenGear"}},
+                WhiteKey = {Synthetic = {"RedGear", "GreenGear"}},
                 KeyCode = {Active = {"YellowKey"}},
             },
             Depends = {
                 KeyCode = {"YellowKey"},
+                WhiteKey = {"RedGear", "GreenGear"},
+            },
+            Synthetic = {
                 WhiteKey = {"RedGear", "GreenGear"},
             },
             Priority = {
@@ -4084,6 +4087,81 @@ end)()
         end
     end
 
+    local syntheticCompleted = {}
+
+    local function syntheticTarget(id)
+        local map = currentMapModel()
+        if not map then return nil end
+
+        local best
+        local bestScore = -math.huge
+        for _, object in ipairs(map:GetDescendants()) do
+            if object:IsA("Model") or object:IsA("BasePart") then
+                local part = getPart(object)
+                if part then
+                    local text = string.lower(object.Name)
+                    local score = 0
+                    if text:find("gear", 1, true) then score += 8 end
+                    if text:find("well", 1, true) then score += 6 end
+                    if text:find("machine", 1, true) then score += 3 end
+                    if text:find("event", 1, true) then score += 2 end
+                    if requirementEventMesh(object) then score += 7 end
+
+                    local required = object:FindFirstChild("ToolRequired", true)
+                    if required and required:IsA("StringValue") then
+                        local requiredId = idFromText(required.Value)
+                        if requiredId == id then score += 20 end
+                    end
+
+                    if score > bestScore then
+                        best = object
+                        bestScore = score
+                    end
+                end
+            end
+        end
+
+        return bestScore >= 6 and best or nil
+    end
+
+    local function syntheticObjective(id, parentId)
+        if syntheticCompleted[id] then return nil end
+
+        local owned = findOwnedById and findOwnedById(id)
+        local worldItem = findItemById and findItemById(id)
+        if not owned and not worldItem then return nil end
+
+        local target = syntheticTarget(id)
+        local part = target and getPart(target)
+        if not target or not part then
+            -- Still expose the prerequisite so the solver collects it first.
+            local item = worldItem
+            local itemPart = item and getPart(item)
+            return {
+                Id = id,
+                ItemName = displayNames[id] or id,
+                Target = item or currentMapModel(),
+                Part = itemPart or (currentMapModel() and getPart(currentMapModel())),
+                TargetName = "Gear mechanism",
+                Requirement = nil,
+                Synthetic = true,
+                ParentId = parentId,
+                NeedsTarget = true,
+            }
+        end
+
+        return {
+            Id = id,
+            ItemName = displayNames[id] or id,
+            Target = target,
+            Part = part,
+            TargetName = readableTargetName(id, target),
+            Requirement = nil,
+            Synthetic = true,
+            ParentId = parentId,
+        }
+    end
+
     local function collectObjectives()
         local result = {}
         local seen = {}
@@ -4110,6 +4188,36 @@ end)()
                 end
             end
         end
+
+        local profile = mapProfiles[currentMapName()]
+        if profile and profile.Synthetic then
+            local snapshot = {}
+            for _, objective in ipairs(result) do snapshot[#snapshot + 1] = objective end
+
+            for _, parent in ipairs(snapshot) do
+                local chain = profile.Synthetic[parent.Id]
+                if chain then
+                    for _, dependency in ipairs(chain) do
+                        if not syntheticCompleted[dependency] then
+                            local alreadyActive = false
+                            for _, existing in ipairs(result) do
+                                if existing.Id == dependency then
+                                    alreadyActive = true
+                                    break
+                                end
+                            end
+                            if not alreadyActive then
+                                local synthetic = syntheticObjective(dependency, parent.Id)
+                                if synthetic and synthetic.Part then
+                                    result[#result + 1] = synthetic
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
         return result
     end
 
@@ -4156,6 +4264,19 @@ end)()
 
     local function blockingObjectiveFor(objective, objectives)
         local profile = mapProfiles[currentMapName()]
+        local synthetic = profile and profile.Synthetic and profile.Synthetic[objective.Id]
+        if synthetic then
+            for _, dependency in ipairs(synthetic) do
+                if not syntheticCompleted[dependency] then
+                    for _, candidate in ipairs(objectives) do
+                        if candidate ~= objective and candidate.Id == dependency then
+                            return candidate
+                        end
+                    end
+                end
+            end
+        end
+
         local dependencies = profile and profile.Depends and profile.Depends[objective.Id]
         if dependencies then
             for _, dependency in ipairs(dependencies) do
@@ -4419,10 +4540,16 @@ end)()
 
         humanoid.Jump = false
         task.wait(0.05)
-        local completed = not objectiveStillActive(objective)
+        local completed = objective.Synthetic and false or not objectiveStillActive(objective)
         local toolConsumed = tool and (not tool.Parent or tool.Parent ~= toolParent)
             and not findOwnedById(objective.Id)
         local progressed = completed or toolConsumed or progressFingerprint() ~= before
+
+        if objective.Synthetic and progressed then
+            syntheticCompleted[objective.Id] = true
+            completed = true
+        end
+
         endAutomationMove()
         return ok and completed, ok and progressed
     end
@@ -4553,6 +4680,16 @@ end)()
 
             local required = equipRequired(objective.Id)
             if required then
+                if objective.Synthetic and objective.NeedsTarget then
+                    local target = syntheticTarget(objective.Id)
+                    if target and getPart(target) then
+                        objective.Target = target
+                        objective.Part = getPart(target)
+                        objective.TargetName = readableTargetName(objective.Id, target)
+                        objective.NeedsTarget = nil
+                    end
+                end
+
                 local completed, progressed = activateObjective(objective)
                 if objective.Requirement then
                     if progressed then
