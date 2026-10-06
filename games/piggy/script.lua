@@ -1531,12 +1531,6 @@ return function(ctx)
         local map = currentMapName()
 
         local profile = mapProfiles[map]
-        if map == "House" and id == "WhiteKey" then
-            -- Physical WhiteKey spawn is authoritative proof that the well is complete.
-            syntheticCompleted.RedGear = true
-            syntheticCompleted.GreenGear = true
-        end
-
         local gate = profile and profile.Gates and profile.Gates[id]
         if gate then
             for _, dependency in ipairs(gate.Present or {}) do
