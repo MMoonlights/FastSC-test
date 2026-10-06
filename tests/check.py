@@ -103,7 +103,20 @@ config = texts["core/config.lua"]
 for token in ["scheduleSave", "GetGame", "SetGame"]:
     assert token in config, token
 
-piggy = texts["games/piggy/script.lua"]
+piggy_paths = [
+    "games/piggy/script.lua",
+    "games/piggy/state.lua",
+    "games/piggy/data.lua",
+    "games/piggy/scanner.lua",
+    "games/piggy/puzzles.lua",
+    "games/piggy/objectives.lua",
+    "games/piggy/bypasses.lua",
+    "games/piggy/ui.lua",
+]
+for path in piggy_paths:
+    target = root / path
+    assert target.is_file(), path
+piggy = "\n".join((root / path).read_text(encoding="utf-8") for path in piggy_paths)
 for token in [
     'ctx.Mode or "Legit"',
     "ItemPickupScript",
@@ -232,7 +245,7 @@ story_maps = [
     "Alleys", "Store", "Refinery", "SafePlace", "Sewers", "Factory",
     "Port", "Ship", "Docks", "Temple", "Camp", "Lab",
 ]
-profiles_start = piggy.index("local mapProfiles = {")
+profiles_start = piggy.index("mapProfiles = {")
 profiles_end = piggy.index('mapProfiles["The Safe Place"]', profiles_start)
 profiles_text = piggy[profiles_start:profiles_end]
 for map_name in story_maps:
