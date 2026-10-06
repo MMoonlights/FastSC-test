@@ -4535,6 +4535,12 @@ end)()
         local handle = tool and (tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart", true))
         local eventParts = objectiveEventParts(objective)
         local before = progressFingerprint()
+        local targetBefore = objective.Target and tostring(objective.Target:GetFullName()) or ""
+        local targetPartBefore = objective.Part and objective.Part.Parent and table.concat({
+            tostring(objective.Part.CFrame),
+            tostring(objective.Part.Transparency),
+            tostring(objective.Part.CanCollide),
+        }, "|") or ""
         local toolParent = tool and tool.Parent
         if #eventParts == 0 then return false end
 
@@ -4580,9 +4586,29 @@ end)()
         local completed = objective.Synthetic and false or not objectiveStillActive(objective)
         local toolConsumed = tool and (not tool.Parent or tool.Parent ~= toolParent)
             and not findOwnedById(objective.Id)
-        local progressed = completed or toolConsumed or progressFingerprint() ~= before
 
-        if objective.Synthetic and progressed then
+        local targetChanged = false
+        if objective.Synthetic then
+            if not objective.Target or not objective.Target.Parent then
+                targetChanged = true
+            elseif objective.Part and objective.Part.Parent then
+                local now = table.concat({
+                    tostring(objective.Part.CFrame),
+                    tostring(objective.Part.Transparency),
+                    tostring(objective.Part.CanCollide),
+                }, "|")
+                targetChanged = now ~= targetPartBefore
+            elseif tostring(objective.Target:GetFullName()) ~= targetBefore then
+                targetChanged = true
+            end
+        end
+
+        local globalProgress = progressFingerprint() ~= before
+        local progressed = completed or toolConsumed
+            or (objective.Synthetic and targetChanged)
+            or (not objective.Synthetic and globalProgress)
+
+        if objective.Synthetic and (toolConsumed or targetChanged) then
             syntheticCompleted[objective.Id] = true
             completed = true
         end
