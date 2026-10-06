@@ -4741,6 +4741,49 @@ end)()
         return false
     end
 
+    local function nearestPiggyPart()
+        local root = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not root then return nil end
+        local best
+        local bestDistance = math.huge
+        for _, model in ipairs(workspace:GetChildren()) do
+            if model:IsA("Model") and model ~= localPlayer.Character then
+                local lower = string.lower(model.Name)
+                local isPiggy = lower:find("piggy", 1, true)
+                    or lower:find("bot", 1, true)
+                    or model:FindFirstChild("IsPiggy")
+                local humanoid = model:FindFirstChildOfClass("Humanoid")
+                local part = model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart
+                if isPiggy and humanoid and humanoid.Health > 0 and part then
+                    local distance = (part.Position - root.Position).Magnitude
+                    if distance < bestDistance then
+                        best = part
+                        bestDistance = distance
+                    end
+                end
+            end
+        end
+        return best, bestDistance
+    end
+
+    local function moveAwayFromPiggy()
+        local character = localPlayer.Character
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+        if not root then return end
+        local piggyPart, distance = nearestPiggyPart()
+        if not piggyPart or not distance or distance > 18 then return end
+
+        local direction = root.Position - piggyPart.Position
+        if direction.Magnitude < 0.1 then direction = Vector3.new(1, 0, 0) end
+        direction = Vector3.new(direction.X, 0, direction.Z)
+        if direction.Magnitude < 0.1 then direction = Vector3.new(1, 0, 0) end
+        direction = direction.Unit
+
+        local safe = root.Position + direction * 14 + Vector3.new(0, 3, 0)
+        pcall(function() character:PivotTo(CFrame.new(safe, safe + direction)) end)
+        zeroCharacterVelocity(character)
+    end
+
     local function finishRun(reason)
         if runFinished then return end
         runFinished = true
@@ -4754,6 +4797,7 @@ end)()
         currentObjective = nil
         escapeTouchOverride = false
         setCharacterTouch(true)
+        moveAwayFromPiggy()
 
         if objectiveCurrentLabel then objectiveCurrentLabel:Set("Current objective: completed") end
         if objectiveNeededLabel then objectiveNeededLabel:Set("Items needed: none") end
