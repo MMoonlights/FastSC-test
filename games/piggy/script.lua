@@ -431,6 +431,14 @@ return function(ctx)
         DayPaintBucket = "Day Paint Bucket",
         NightPaintBucket = "Night Paint Bucket",
         SunsetPaintBucket = "Sunset Paint Bucket",
+        Snowball = "Snowball",
+        PremiumTicket = "Premium Ticket",
+        Strawberry = "Strawberry",
+        Box = "Box",
+        Katana = "Katana",
+        Prop = "Prop",
+        Clothing = "Clothing",
+        Clothes = "Clothes",
     }
 
     local aliases = {}
@@ -480,6 +488,14 @@ return function(ctx)
     aliases[token("Sunset Paint Bucket")] = "SunsetPaintBucket"
     aliases[token("Gift")] = "Presents"
     aliases[token("Present")] = "Presents"
+    aliases[token("Premium Pass")] = "PremiumTicket"
+    aliases[token("Premium Ticket")] = "PremiumTicket"
+    aliases[token("Costume")] = "Clothing"
+    aliases[token("Clothes")] = "Clothing"
+    aliases[token("Clothing")] = "Clothing"
+    aliases[token("Theater Prop")] = "Prop"
+    aliases[token("Theatre Prop")] = "Prop"
+    aliases[token("Props")] = "Prop"
     aliases[token("Torch")] = "Torch"
     aliases[token("Mirror")] = "Mirror"
     aliases[token("Red Egg")] = "RedEgg"
@@ -990,6 +1006,59 @@ return function(ctx)
                 WhiteKey = 100,
             },
         },
+        DistortedHoliday = {
+            Gates = {
+                YellowKey = {Active = {"OrangeKey"}},
+                RedKey = {Active = {"Ladder"}},
+                PurpleKey = {Active = {"Shovel"}},
+                BlackKey = {Active = {"RedKey", "PurpleKey"}},
+                OrangeKey = {Active = {"Hammer"}},
+                Torch = {Active = {"BlackKey"}},
+            },
+            Depends = {
+                YellowKey = {"OrangeKey"},
+                RedKey = {"Ladder"},
+                PurpleKey = {"Shovel"},
+                BlackKey = {"RedKey", "PurpleKey"},
+                OrangeKey = {"Hammer"},
+                Torch = {"BlackKey"},
+            },
+            Counters = {
+                Torch = 3,
+            },
+            Priority = {
+                GreenKey = 10, BlueKey = 15, Ladder = 20, Shovel = 25,
+                PurpleKey = 30, RedKey = 35, BlackKey = 40, Hammer = 45,
+                OrangeKey = 50, YellowKey = 55, Scissors = 60, Snowball = 65,
+                Torch = 100,
+            },
+        },
+        HolidaySpirit = {
+            Counters = {
+                Strawberry = 3,
+                Prop = 10,
+                Clothing = 7,
+            },
+            Priority = {
+                Ticket = 10, PurpleKey = 15, PremiumTicket = 20, RedKey = 25,
+                BlueKey = 30, GreenKey = 35, OrangeKey = 40, Ladder = 45,
+                Wrench = 50, Axe = 55, Box = 60, Katana = 65,
+                Strawberry = 75, Prop = 90, Clothing = 100,
+            },
+        },
+        TheHunt = {
+            Puzzle = "HuntSequence",
+            Gates = {
+                ElevatorKey = {Active = {"RedKey"}},
+            },
+            Depends = {
+                ElevatorKey = {"RedKey"},
+            },
+            Priority = {
+                YellowKey = 10, BlueKey = 15, RedKey = 30,
+                ElevatorKey = 40, GreenKey = 50,
+            },
+        },
         Lab = {
             Puzzle = "ReactorLevers",
             Depends = {
@@ -1010,6 +1079,9 @@ return function(ctx)
     mapProfiles["The Safe Place"] = mapProfiles.SafePlace
     mapProfiles["Distorted Memory"] = mapProfiles.DistortedMemory
     mapProfiles["Winter Holiday"] = mapProfiles.WinterHoliday
+    mapProfiles["Distorted Holiday"] = mapProfiles.DistortedHoliday
+    mapProfiles["Holiday Spirit"] = mapProfiles.HolidaySpirit
+    mapProfiles["The Hunt"] = mapProfiles.TheHunt
 
     local function cleanAssetId(value)
         return tostring(value or ""):match("%d+") or ""
