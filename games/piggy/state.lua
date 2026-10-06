@@ -212,6 +212,24 @@ automationGeneration = 0
 automationLastCorrection = 0
 automationLastMoveAt = 0
 automationLastTarget = nil
+automationHold = false
+
+function setAutomationHold(enabled)
+    automationHold = enabled == true
+    local character = localPlayer.Character
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+
+    if automationHold then
+        scope:Set(root, "Anchored", true)
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.AssemblyAngularVelocity = Vector3.zero
+    else
+        scope:Restore(root, "Anchored")
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.AssemblyAngularVelocity = Vector3.zero
+    end
+end
 
 function zeroCharacterVelocity(character)
     if not character then return end
@@ -250,6 +268,9 @@ function beginAutomationMove(target)
 
     automationActive = true
     automationTarget = target
+    if automationHold then
+        scope:Set(root, "Anchored", true)
+    end
     automationDeadline = now + 2
     setAutomationCollision(true)
     if humanoid then scope:Set(humanoid, "AutoRotate", false) end
@@ -274,6 +295,9 @@ function endAutomationMove()
     automationDeadline = 0
     zeroCharacterVelocity(character)
     if humanoid then scope:Restore(humanoid, "AutoRotate") end
+    if automationHold and root then
+        scope:Set(root, "Anchored", true)
+    end
     if not noclip then setAutomationCollision(false) end
 end
 
@@ -289,11 +313,24 @@ function releaseAutomation()
         humanoid.Jump = false
         scope:Restore(humanoid, "AutoRotate")
     end
+    if automationHold then
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+        if root then scope:Set(root, "Anchored", true) end
+    end
     if not noclip then setAutomationCollision(false) end
     zeroCharacterVelocity(character)
 end
 
 scope:Connect(RunService.PreSimulation, function()
+    local character = localPlayer.Character
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+
+    if automationHold and root then
+        scope:Set(root, "Anchored", true)
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.AssemblyAngularVelocity = Vector3.zero
+    end
+
     if not automationActive then return end
     local now = os.clock()
     if automationDeadline > 0 and now > automationDeadline then
@@ -302,14 +339,10 @@ scope:Connect(RunService.PreSimulation, function()
         autoCompleteBusy = false
         return
     end
-
-    local character = localPlayer.Character
-    local root = character and character:FindFirstChild("HumanoidRootPart")
     if not root or not automationTarget then return end
 
-    -- Do not CFrame-lock every frame. Only correct a real server/physics knockback.
     local drift = (root.Position - automationTarget.Position).Magnitude
-    if drift > 7 and now - automationLastCorrection >= 0.12 then
+    if drift > 1.5 and now - automationLastCorrection >= 0.08 then
         automationLastCorrection = now
         zeroCharacterVelocity(character)
         pcall(function() character:PivotTo(automationTarget) end)
