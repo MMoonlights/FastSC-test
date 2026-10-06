@@ -3202,41 +3202,20 @@ end)()
     end
 
     local function targetFromRequirement(value)
-        if value and value.Parent and value.Name == "ToolRequired" then
-            local direct = value.Parent
-            if direct:IsA("BasePart") or getPart(direct) then
-                return direct
-            end
-        end
+        local host = requirementHost(value)
+        if host and getPart(host) then return host end
 
-        local current = value.Parent
+        local current = value and value.Parent
         local fallback
-        for _ = 1, 5 do
+        for _ = 1, 7 do
             if not current or current == workspace then break end
             if items[current] then return nil end
             if current:IsA("Model") or current:IsA("BasePart") then
                 local part = getPart(current)
                 if part then
                     fallback = fallback or current
-                    local mesh = current:FindFirstChildWhichIsA("SpecialMesh", true)
-                    local eventMesh = mesh
-                        and cleanAssetId(mesh.MeshId) == "524497312"
-                        and (mesh.Scale - Vector3.new(0.75, 0.5, 0.75)).Magnitude <= 0.05
-                    if eventMesh then return current end
-
                     local required = current:FindFirstChild("ToolRequired")
                     if required and required:IsA("StringValue") then return current end
-
-                    local lower = string.lower(current.Name)
-                    local hasInteraction = current:FindFirstChildWhichIsA("ClickDetector", true)
-                        or current:FindFirstChildWhichIsA("ProximityPrompt", true)
-                    local isNamed = lower:find("door", 1, true)
-                        or lower:find("gate", 1, true)
-                        or lower:find("panel", 1, true)
-                        or lower:find("lock", 1, true)
-                        or lower:find("power", 1, true)
-                        or lower:find("safe", 1, true)
-                    if hasInteraction or isNamed then return current end
                 end
             end
             current = current.Parent
@@ -3528,9 +3507,51 @@ end)()
 
     local function objectiveStillActive(objective)
         local requirement = objective and objective.Requirement
+        local map = currentMapModel()
         return requirement
             and requirement.Parent
+            and map
+            and requirement:IsDescendantOf(map)
             and idFromText(requirement.Value) == objective.Id
+    end
+
+    local function objectiveEventParts(objective)
+        local result = {}
+        local seen = {}
+
+        local function add(part)
+            if not part or not part:IsA("BasePart") or seen[part] then return end
+            seen[part] = true
+            result[#result + 1] = part
+        end
+
+        local requirement = objective and objective.Requirement
+        if requirement and requirement.Parent then
+            if requirement.Parent:IsA("BasePart") then
+                add(requirement.Parent)
+            else
+                add(getPart(requirement.Parent))
+            end
+        end
+
+        local target = objective and objective.Target
+        if target then
+            if target:IsA("BasePart") then add(target) end
+            for _, descendant in ipairs(target:GetDescendants()) do
+                if descendant:IsA("BasePart") then
+                    local hasInteraction = descendant:FindFirstChildWhichIsA("ClickDetector", true)
+                        or descendant:FindFirstChildWhichIsA("ProximityPrompt", true)
+                        or descendant:FindFirstChildWhichIsA("TouchTransmitter", true)
+                    local required = descendant:FindFirstChild("ToolRequired")
+                    if hasInteraction or required or requirementEventMesh(descendant) then
+                        add(descendant)
+                    end
+                end
+            end
+            add(getPart(target))
+        end
+
+        return result
     end
 
     local function activateObjective(objective)
@@ -3548,52 +3569,47 @@ end)()
         end
 
         local handle = tool and (tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart", true))
-        local eventPart
-        if objective.Requirement and objective.Requirement.Parent and objective.Requirement.Parent:IsA("BasePart") then
-            eventPart = objective.Requirement.Parent
-        else
-            eventPart = getPart(objective.Target)
-        end
-        if not eventPart then return false end
+        local eventParts = objectiveEventParts(objective)
+        if #eventParts == 0 then return false end
 
-        local target = eventPart.CFrame + Vector3.new(1, 0, 1)
-        beginAutomationMove(target)
-        task.wait(0.02)
-
-        local touched = false
         local ok = pcall(function()
-            for _ = 1, 8 do
+            for _ = 1, 4 do
                 if not objectiveStillActive(objective) then break end
-                automationDeadline = os.clock() + 2
-                humanoid.Jump = true
 
-                if handle and firetouchinterest then
-                    firetouchinterest(handle, eventPart, 0)
+                for _, eventPart in ipairs(eventParts) do
+                    if not objectiveStillActive(objective) then break end
+                    if not eventPart.Parent then continue end
+
+                    beginAutomationMove(eventPart.CFrame + eventPart.CFrame.LookVector * -1.5 + Vector3.new(0, 1, 0))
                     task.wait(0.025)
-                    firetouchinterest(handle, eventPart, 1)
-                    touched = true
-                else
-                    local root = character:FindFirstChild("HumanoidRootPart")
-                    if root and firetouchinterest then
-                        firetouchinterest(root, eventPart, 0)
-                        task.wait(0.025)
-                        firetouchinterest(root, eventPart, 1)
-                        touched = true
+                    automationDeadline = os.clock() + 2
+                    humanoid.Jump = true
+
+                    local touchPart = handle
+                    if not touchPart or not touchPart.Parent then
+                        touchPart = character:FindFirstChild("HumanoidRootPart")
                     end
+                    if touchPart and firetouchinterest then
+                        pcall(function()
+                            firetouchinterest(touchPart, eventPart, 0)
+                            task.wait(0.02)
+                            firetouchinterest(touchPart, eventPart, 1)
+                        end)
+                    end
+
+                    pcall(function() tool:Activate() end)
+
+                    local click = eventPart:FindFirstChildWhichIsA("ClickDetector", true)
+                    local prompt = eventPart:FindFirstChildWhichIsA("ProximityPrompt", true)
+                    if click and fireclickdetector then pcall(fireclickdetector, click) end
+                    if prompt and fireproximityprompt then pcall(fireproximityprompt, prompt) end
+                    task.wait(0.035)
                 end
-
-                pcall(function() tool:Activate() end)
-
-                local click = eventPart:FindFirstChildWhichIsA("ClickDetector", true)
-                local prompt = eventPart:FindFirstChildWhichIsA("ProximityPrompt", true)
-                if click and fireclickdetector then pcall(fireclickdetector, click) end
-                if prompt and fireproximityprompt then pcall(fireproximityprompt, prompt) end
-                task.wait(0.035)
             end
         end)
 
         humanoid.Jump = false
-        task.wait(0.04)
+        task.wait(0.05)
         local completed = not objectiveStillActive(objective)
         endAutomationMove()
         return ok and completed
