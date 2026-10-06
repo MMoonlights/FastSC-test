@@ -49,6 +49,9 @@ return function(ctx)
     local objectiveEsp = false
     local objectiveVisualTarget
     local autoCompleteBusy = false
+    local runFinished = false
+    local escapeAttempts = 0
+    local lastEscapeAttempt = 0
     local pickupBusy = false
     local objectiveCooldowns = setmetatable({}, {__mode = "k"})
     local objectiveFailures = setmetatable({}, {__mode = "k"})
@@ -4630,7 +4633,29 @@ end)()
                     local prompt = eventPart:FindFirstChildWhichIsA("ProximityPrompt", true)
                     if click and fireclickdetector then pcall(fireclickdetector, click) end
                     if prompt and fireproximityprompt then pcall(fireproximityprompt, prompt) end
-                    task.wait(0.035)
+
+                    local interactionBefore = before
+                    local waitDeadline = os.clock() + 0.18
+                    repeat
+                        task.wait(0.025)
+                        if not objectiveNeedsActivation(objective)
+                            or not findOwnedById(objective.Id)
+                            or progressFingerprint() ~= interactionBefore then
+                            break
+                        end
+                    until os.clock() >= waitDeadline
+
+                    if not objectiveNeedsActivation(objective)
+                        or not findOwnedById(objective.Id)
+                        or progressFingerprint() ~= interactionBefore then
+                        break
+                    end
+                end
+
+                if not objectiveNeedsActivation(objective)
+                    or not findOwnedById(objective.Id)
+                    or progressFingerprint() ~= before then
+                    break
                 end
             end
         end)
@@ -4716,7 +4741,46 @@ end)()
         return false
     end
 
+    local function finishRun(reason)
+        if runFinished then return end
+        runFinished = true
+        autoComplete = false
+        autoCompleteBusy = false
+        pickupBusy = false
+        scope:StopTask("autoComplete")
+        releaseAutomation()
+        clearKind("Objective")
+        objectiveVisualTarget = nil
+        currentObjective = nil
+        escapeTouchOverride = false
+        setCharacterTouch(true)
+
+        if objectiveCurrentLabel then objectiveCurrentLabel:Set("Current objective: completed") end
+        if objectiveNeededLabel then objectiveNeededLabel:Set("Items needed: none") end
+        if objectiveStatusLabel then objectiveStatusLabel:Set("Status: run completed" .. (reason and " | " .. reason or "")) end
+    end
+
+    local function exitRequirementActive()
+        for value in pairs(requirements) do
+            if value.Parent and isObjectiveRequirement(value) then
+                local id = idFromText(value.Value)
+                if id == "WhiteKey" or id == "KeyCode" or id == "BlueKeycard" then
+                    local host = requirementHost(value)
+                    local part = host and getPart(host)
+                    if part and isEscapeRelatedPart(part) then return true end
+                end
+            end
+        end
+        return false
+    end
+
     local function autoEscapeStep()
+        if runFinished then return false end
+        local now = os.clock()
+        if now - lastEscapeAttempt < 0.75 then return false end
+        lastEscapeAttempt = now
+        escapeAttempts += 1
+
         local root = Common.Root()
         local best
         local bestDistance = math.huge
@@ -4770,13 +4834,27 @@ end)()
         if click and fireclickdetector then pcall(fireclickdetector, click) end
         if prompt and fireproximityprompt then pcall(fireproximityprompt, prompt) end
 
-        task.wait(0.2)
+        task.wait(0.3)
         endAutomationMove()
         escapeTouchOverride = false
+
+        local exitStillLocked = exitRequirementActive()
+        local stillNearExit = nearEscapeTrigger(16)
+        if not exitStillLocked and (not stillNearExit or escapeAttempts >= 2) then
+            finishRun("exit reached")
+            return true
+        end
+
+        -- Do not hammer the same exit every solver tick.
+        if escapeAttempts >= 4 and not exitStillLocked then
+            finishRun("exit interaction completed")
+            return true
+        end
         return true
     end
 
     local function autoCompleteStep()
+        if runFinished or not autoComplete then return end
         if autoCompleteBusy then return end
         autoCompleteBusy = true
 
@@ -5137,6 +5215,9 @@ end)()
             autoComplete = value
             releaseAutomation()
             if value then
+                runFinished = false
+                escapeAttempts = 0
+                lastEscapeAttempt = 0
                 autoGrab = false
                 autoInteract = false
                 scope:StopTask("autoGrab")
