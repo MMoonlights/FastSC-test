@@ -775,9 +775,18 @@ scope:Loop("visuals", 0.25, refreshVisuals)
 
 function detectorFor(item)
     if not item then return nil end
-    return item:FindFirstChildWhichIsA("ClickDetector", true),
-        item:FindFirstChildWhichIsA("ProximityPrompt", true),
-        item:FindFirstChildWhichIsA("TouchTransmitter", true)
+
+    -- Classic Piggy pickups keep ClickDetector directly beside
+    -- ItemPickupScript. Prefer the direct detector before recursive fallbacks
+    -- so we do not accidentally fire a detector belonging to a child effect.
+    local click = item:FindFirstChildOfClass("ClickDetector")
+        or item:FindFirstChildWhichIsA("ClickDetector", true)
+    local prompt = item:FindFirstChildOfClass("ProximityPrompt")
+        or item:FindFirstChildWhichIsA("ProximityPrompt", true)
+    local touch = item:FindFirstChildOfClass("TouchTransmitter")
+        or item:FindFirstChildWhichIsA("TouchTransmitter", true)
+
+    return click, prompt, touch
 end
 
 function firePickupInteraction(item, part)
@@ -787,36 +796,48 @@ function firePickupInteraction(item, part)
     local click, prompt, touch = detectorFor(item)
 
     if click and click.Parent and fireclickdetector then
-        local oldDistance = click.MaxActivationDistance
-        pcall(function() click.MaxActivationDistance = math.huge end)
-        pcall(fireclickdetector, click)
-        pcall(function() click.MaxActivationDistance = oldDistance end)
-        fired = true
+        -- Piggy's ItemPickupScript expects the normal ClickDetector path.
+        -- The player is already placed directly on the item before this call,
+        -- so no artificial MaxActivationDistance mutation is needed.
+        local ok = pcall(fireclickdetector, click)
+        fired = ok or fired
     end
 
-    if prompt and prompt.Parent and prompt.Enabled and fireproximityprompt then
+    if prompt and prompt.Parent and fireproximityprompt then
         local oldHold = prompt.HoldDuration
         pcall(function() prompt.HoldDuration = 0 end)
-        pcall(fireproximityprompt, prompt)
+        local ok = pcall(fireproximityprompt, prompt)
         pcall(function() prompt.HoldDuration = oldHold end)
-        fired = true
+        fired = ok or fired
     end
 
-    -- Several Piggy pickup variants are touch-backed even when their visible
-    -- pickup model also contains a Script/ItemHandler. Always try a server-side
-    -- touch as a fallback so Full Run is not limited to click/prompt items.
-    local root = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+    -- Touch is a fallback for newer/custom Piggy pickup handlers.
+    local character = localPlayer.Character
+    local root = character and character:FindFirstChild("HumanoidRootPart")
     if root and firetouchinterest then
         local touchPart = touch and touch.Parent
         if not touchPart or not touchPart:IsA("BasePart") then touchPart = part end
+
+        -- God mode can locally disable CanTouch. Restore it for the instant
+        -- pickup attempt; its own loop can re-apply protection afterwards.
+        for _, bodyPart in ipairs(character:GetDescendants()) do
+            if bodyPart:IsA("BasePart") then
+                scope:Restore(bodyPart, "CanTouch")
+            end
+        end
 
         if touchPart and touchPart.Parent then
             Common.Touch(root, touchPart)
             fired = true
         end
-        if part ~= touchPart and part.Parent then
-            Common.Touch(root, part)
-            fired = true
+
+        -- Some maps listen on the item part but expect a limb/torso contact.
+        for _, name in ipairs({"LowerTorso", "Torso", "LeftFoot", "RightFoot", "Left Leg", "Right Leg"}) do
+            local bodyPart = character:FindFirstChild(name)
+            if bodyPart and bodyPart:IsA("BasePart") and part.Parent then
+                Common.Touch(bodyPart, part)
+                fired = true
+            end
         end
     end
 
@@ -968,7 +989,7 @@ function grabItem(item, returnAfter, expectedId)
 
     local owned
     local success = pcall(function()
-        local confirmWindows = {0.45, 0.65, 0.9}
+        local confirmWindows = {0.8, 1.0, 1.2}
 
         for attempt = 1, 3 do
             if cancelled() then break end
@@ -984,10 +1005,13 @@ function grabItem(item, returnAfter, expectedId)
             -- replace their interaction instance after the first server response.
             click, prompt, touch = detectorFor(item)
 
-            local target = part.CFrame + Vector3.new(0, 1.75, 0)
+            -- Item pickup is intentionally different from door/objective use:
+            -- classic Piggy requires the HRP to be at the item's own CFrame
+            -- before ItemPickupScript's ClickDetector reliably accepts it.
+            local target = part.CFrame
             beginAutomationMove(target)
             automationDeadline = os.clock() + 3
-            task.wait(0.04)
+            task.wait(0.10)
 
             local fired = firePickupInteraction(item, part)
             if not fired then
