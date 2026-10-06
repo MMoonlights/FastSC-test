@@ -252,13 +252,26 @@ return function(ctx)
         return false
     end
 
+    local pickupScriptNames = {
+        ItemPickupScript = true,
+        NewItemPickupScript = true,
+    }
+
+    local function hasPickupScript(container)
+        if not container then return false end
+        for name in pairs(pickupScriptNames) do
+            if container:FindFirstChild(name) then return true end
+        end
+        return false
+    end
+
     local function itemObjectFrom(instance)
-        if instance.Name == "ItemPickupScript" and instance.Parent then
+        if pickupScriptNames[instance.Name] and instance.Parent then
             return instance.Parent
         end
         local current = instance
         while current and current ~= workspace do
-            if current:FindFirstChild("ItemPickupScript") then return current end
+            if hasPickupScript(current) then return current end
             current = current.Parent
         end
     end
@@ -1779,16 +1792,43 @@ return function(ctx)
         GreenKey = "Green Door",
         RedKey = "Red Door",
         OrangeKey = "Orange Door",
-        YellowKey = "Yellow Door",
-        PurpleKey = "Purple Door",
-        WhiteKey = "Front Door",
-        Wrench = "Power Panel",
-        Hammer = "Front Door",
+        YellowKey = "Yellow Door / Safe",
+        PurpleKey = "Purple Door / Safe",
+        WhiteKey = "Exit / White Lock",
+        Wrench = "Power / Wrench Panel",
+        Hammer = "Boards / Hammer Event",
         KeyCode = "Number Lock",
         BlueKeycard = "Blue Keycard Reader",
         RedKeycard = "Red Keycard Reader",
         OrangeKeycard = "Orange Keycard Reader",
         GreenKeycard = "Green Keycard Reader",
+        RedGear = "Gear Mechanism",
+        GreenGear = "Gear Mechanism",
+        WhiteGear = "Sewer Control",
+        RedEgg = "Egg Display",
+        GreenEgg = "Egg Display",
+        EmptyVial = "Vial Station",
+        GreenVial = "Vial Station",
+        PurpleVial = "Vial Station",
+        Coin = "Coin Machine",
+        Mallet = "High Striker",
+        WaterGun = "Carnival Target",
+        Mirror = "Vault / Mirror Event",
+        TankBullet = "Tank",
+        Gas = "Tank / Generator",
+        Screwdriver = "Screwdriver Panel",
+        Mop = "Mop Event",
+        Blowtorch = "Blowtorch Event",
+        Ladder = "Ladder Event",
+        Rope = "Rope Event",
+        GrapplingHook = "Grappling Hook Event",
+        Battery = "Battery Slot",
+        RemoteControl = "Remote Screen",
+        Candle = "Candle Event",
+        TNT = "TNT Event",
+        Dynamite = "Dynamite Event",
+        Pipe = "Pipe Event",
+        WoodenSword = "Sword Event",
     }
 
     local function idFromText(value)
@@ -1829,6 +1869,12 @@ return function(ctx)
         "machine",
         "control",
         "handle",
+        "cannon",
+        "artillery",
+        "screen",
+        "crane",
+        "pump",
+        "wheel",
     }
 
     local function interactionHost(interactive)
