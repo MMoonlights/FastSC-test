@@ -419,6 +419,18 @@ return function(ctx)
         Key = "Key",
         Mallet = "Mallet",
         Crossbow = "Crossbow",
+        RobotToy = "Robot Toy",
+        DinosaurToy = "Dinosaur Toy",
+        Barbell = "Barbell",
+        Pie = "Pie",
+        SprayCan = "Spray Can",
+        BlackKey = "Black Key",
+        Crystal = "Crystal",
+        MilitaryKnife = "Military Knife",
+        FrontDoorKey = "Front Door Key",
+        DayPaintBucket = "Day Paint Bucket",
+        NightPaintBucket = "Night Paint Bucket",
+        SunsetPaintBucket = "Sunset Paint Bucket",
     }
 
     local aliases = {}
@@ -450,6 +462,24 @@ return function(ctx)
     aliases[token("Cannon Shell")] = "TankBullet"
     aliases[token("Coin")] = "Coin"
     aliases[token("Token")] = "Coin"
+    aliases[token("Dinosaur")] = "DinosaurToy"
+    aliases[token("Dinosaur Toy")] = "DinosaurToy"
+    aliases[token("Robot")] = "RobotToy"
+    aliases[token("Robot Toy")] = "RobotToy"
+    aliases[token("Dumbbell")] = "Barbell"
+    aliases[token("Barbell")] = "Barbell"
+    aliases[token("Spray")] = "SprayCan"
+    aliases[token("Spray Paint")] = "SprayCan"
+    aliases[token("Spray Can")] = "SprayCan"
+    aliases[token("Front Door Key")] = "FrontDoorKey"
+    aliases[token("Day Paint")] = "DayPaintBucket"
+    aliases[token("Day Paint Bucket")] = "DayPaintBucket"
+    aliases[token("Night Paint")] = "NightPaintBucket"
+    aliases[token("Night Paint Bucket")] = "NightPaintBucket"
+    aliases[token("Sunset Paint")] = "SunsetPaintBucket"
+    aliases[token("Sunset Paint Bucket")] = "SunsetPaintBucket"
+    aliases[token("Gift")] = "Presents"
+    aliases[token("Present")] = "Presents"
     aliases[token("Torch")] = "Torch"
     aliases[token("Mirror")] = "Mirror"
     aliases[token("Red Egg")] = "RedEgg"
@@ -865,6 +895,101 @@ return function(ctx)
                 YellowKey = 55, ElevatorKey = 100,
             },
         },
+        DistortedMemory = {
+            Gates = {
+                DinosaurToy = {Active = {"Wrench"}},
+                RobotToy = {Active = {"Hammer"}},
+                KeyCode = {Active = {"YellowKey"}},
+                WhiteKey = {Present = {"DinosaurToy", "RobotToy"}, Active = {"DinosaurToy", "RobotToy"}},
+            },
+            Depends = {
+                DinosaurToy = {"Wrench"},
+                RobotToy = {"Hammer"},
+                KeyCode = {"YellowKey"},
+                WhiteKey = {"DinosaurToy", "RobotToy"},
+            },
+            Priority = {
+                GreenKey = 10, RedKey = 15, BlueKey = 20, OrangeKey = 25,
+                Wrench = 30, Hammer = 35, Plank = 40, YellowKey = 45,
+                DinosaurToy = 50, RobotToy = 51, KeyCode = 60, WhiteKey = 100,
+            },
+        },
+        WinterHoliday = {
+            Counters = {
+                Presents = 5,
+            },
+            Priority = {
+                Shovel = 10, WhiteKey = 15, Carrot = 20, Dreidel = 25,
+                FencingSword = 30, RobotToy = 35, Book = 40, Presents = 100,
+            },
+        },
+        Heist = {
+            Gates = {
+                Barbell = {Active = {"YellowKey"}},
+                RedKey = {Active = {"PurpleKey"}},
+                Pie = {Active = {"Barbell", "Crowbar", "RedKey", "SprayCan"}},
+            },
+            Depends = {
+                Barbell = {"YellowKey"},
+                RedKey = {"PurpleKey"},
+                Pie = {"Barbell", "Crowbar", "RedKey", "SprayCan"},
+            },
+            Priority = {
+                OrangeKey = 10, GreenKey = 15, BlueKey = 20, Scissors = 25,
+                Crowbar = 30, PurpleKey = 35, YellowKey = 40, Barbell = 45,
+                RedKey = 50, SprayCan = 55, Pie = 100,
+            },
+        },
+        Distraction = {
+            Counters = {
+                TNT = 3,
+            },
+            Gates = {
+                GreenKey = {Active = {"YellowKey"}},
+                Screwdriver = {Active = {"PurpleKey"}},
+            },
+            Depends = {
+                GreenKey = {"YellowKey"},
+                Screwdriver = {"PurpleKey"},
+            },
+            Priority = {
+                OrangeKey = 10, RedKey = 15, BlueKey = 20, Pipe = 25,
+                Candle = 30, YellowKey = 35, GreenKey = 40, PurpleKey = 45,
+                Screwdriver = 50, TNT = 100,
+            },
+        },
+        Breakout = {
+            Puzzle = "BreakoutCircles",
+            Counters = {
+                RedWire = 1, GreenWire = 1, BlueWire = 1, YellowWire = 1,
+            },
+            Priority = {
+                RedWire = 10, GreenWire = 11, BlueWire = 12, YellowWire = 13,
+                FrontDoorKey = 60, MilitaryKnife = 100,
+            },
+        },
+        Mansion = {
+            Gates = {
+                PurpleKey = {Active = {"RemoteControl"}},
+                WhiteKey = {
+                    Present = {"DayPaintBucket", "NightPaintBucket", "SunsetPaintBucket"},
+                    Active = {"DayPaintBucket", "NightPaintBucket", "SunsetPaintBucket"},
+                },
+            },
+            Depends = {
+                PurpleKey = {"RemoteControl"},
+                WhiteKey = {"DayPaintBucket", "NightPaintBucket", "SunsetPaintBucket"},
+            },
+            Counters = {
+                Book = 3,
+            },
+            Priority = {
+                Book = 10, GreenWire = 20, YellowWire = 21, RedKey = 30,
+                BlueKey = 40, RemoteControl = 45, PurpleKey = 50,
+                DayPaintBucket = 60, NightPaintBucket = 61, SunsetPaintBucket = 62,
+                WhiteKey = 100,
+            },
+        },
         Lab = {
             Puzzle = "ReactorLevers",
             Depends = {
@@ -883,6 +1008,8 @@ return function(ctx)
     }
 
     mapProfiles["The Safe Place"] = mapProfiles.SafePlace
+    mapProfiles["Distorted Memory"] = mapProfiles.DistortedMemory
+    mapProfiles["Winter Holiday"] = mapProfiles.WinterHoliday
 
     local function cleanAssetId(value)
         return tostring(value or ""):match("%d+") or ""
@@ -1143,6 +1270,8 @@ return function(ctx)
     local carrotProgressionMaps = {
         Store = true,
         Refinery = true,
+        WinterHoliday = true,
+        ["Winter Holiday"] = true,
     }
 
     local function isObjectiveRequirement(value)
