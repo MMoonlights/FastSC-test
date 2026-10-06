@@ -50,6 +50,7 @@ return function(ctx)
     local autoCompleteBusy = false
     local pickupBusy = false
     local objectiveCooldowns = setmetatable({}, {__mode = "k"})
+    local objectiveFailures = setmetatable({}, {__mode = "k"})
     local disabledEnemyTouches = setmetatable({}, {__mode = "k"})
     local freeInteractionCooldowns = setmetatable({}, {__mode = "k"})
     local objectiveMapLabel
@@ -3863,7 +3864,14 @@ end)()
             if required then
                 local completed = activateObjective(objective)
                 if objective.Requirement then
-                    objectiveCooldowns[objective.Requirement] = os.clock() + (completed and 0.08 or 0.3)
+                    if completed then
+                        objectiveFailures[objective.Requirement] = nil
+                        objectiveCooldowns[objective.Requirement] = os.clock() + 0.08
+                    else
+                        local failures = math.min((objectiveFailures[objective.Requirement] or 0) + 1, 6)
+                        objectiveFailures[objective.Requirement] = failures
+                        objectiveCooldowns[objective.Requirement] = os.clock() + math.min(0.35 * (2 ^ (failures - 1)), 4)
+                    end
                 end
                 if not completed then
                     if not solveSpecialPuzzle() then
