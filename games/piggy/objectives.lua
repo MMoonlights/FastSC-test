@@ -998,6 +998,25 @@ function Round.autoCompleteStep()
     autoCompleteBusy = true
 
     local ok, errorMessage = pcall(function()
+        if currentMapName() == "House" then
+            local ownedWhite = findOwnedById and findOwnedById("WhiteKey")
+            local worldWhite = findItemById and findItemById("WhiteKey")
+            if worldWhite and not ownedWhite then
+                syntheticCompleted.RedGear = true
+                syntheticCompleted.GreenGear = true
+                lastPickupStatus = "White Key spawned: collecting"
+                local picked = grabItem(worldWhite, false, "WhiteKey")
+                if picked then
+                    lastPickupStatus = "White Key collected"
+                end
+                Solver.refreshObjectiveState()
+                return
+            elseif ownedWhite then
+                syntheticCompleted.RedGear = true
+                syntheticCompleted.GreenGear = true
+            end
+        end
+
         local objectives, objective = Solver.refreshObjectiveState()
 
         local profile = mapProfiles[currentMapName()]
