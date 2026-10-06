@@ -4130,7 +4130,6 @@ end)()
 
         local owned = findOwnedById and findOwnedById(id)
         local worldItem = findItemById and findItemById(id)
-        if not owned and not worldItem then return nil end
 
         local target = syntheticTarget(id)
         local part = target and getPart(target)
@@ -4143,7 +4142,7 @@ end)()
                 ItemName = displayNames[id] or id,
                 Target = item or currentMapModel(),
                 Part = itemPart or (currentMapModel() and getPart(currentMapModel())),
-                TargetName = "Gear mechanism",
+                TargetName = owned or worldItem and "Gear mechanism" or "Waiting for gear / mechanism",
                 Requirement = nil,
                 Synthetic = true,
                 ParentId = parentId,
