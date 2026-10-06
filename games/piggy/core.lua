@@ -2,6 +2,7 @@ local Core = {}
 Core.__index = Core
 
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 
 local ALIASES = {
     greenkey="GreenKey", redkey="RedKey", bluekey="BlueKey", yellowkey="YellowKey",
@@ -40,6 +41,7 @@ function Core.new(ctx)
         Player=Players.LocalPlayer, Items={}, Requirements={},
         Running=false, Busy=false, Finished=false, Map=nil, MapName="Unknown",
         LastStatus="idle", LastTarget=nil, Generation=0,
+        HoldUntil=0, HoldTarget=nil, HoldConnection=nil,
     }, Core)
 end
 
@@ -147,14 +149,55 @@ function Core:FindItem(id)
     return best
 end
 
-function Core:MoveTo(cf)
+function Core:StopHold()
+    self.HoldUntil=0
+    self.HoldTarget=nil
+    if self.HoldConnection then
+        self.HoldConnection:Disconnect()
+        self.HoldConnection=nil
+    end
+end
+
+function Core:HoldAt(cf,duration)
+    self:StopHold()
+    self.HoldTarget=cf
+    self.HoldUntil=os.clock()+(duration or 0.35)
+
+    local function stabilize()
+        if not self.HoldTarget or os.clock()>=self.HoldUntil then
+            self:StopHold()
+            return
+        end
+        local char=self.Player.Character
+        local root=char and char:FindFirstChild("HumanoidRootPart")
+        if not root then self:StopHold() return end
+
+        root.AssemblyLinearVelocity=Vector3.zero
+        root.AssemblyAngularVelocity=Vector3.zero
+
+        -- Only correct meaningful drift. This prevents visual CFrame jitter.
+        if (root.Position-self.HoldTarget.Position).Magnitude>0.75 then
+            pcall(function() char:PivotTo(self.HoldTarget) end)
+        end
+    end
+
+    self.HoldConnection=RunService.Heartbeat:Connect(stabilize)
+    stabilize()
+end
+
+function Core:MoveTo(cf,holdDuration)
     local char=self.Player.Character
     local root=char and char:FindFirstChild("HumanoidRootPart")
     if not root then return false end
+
     self.LastTarget=cf
-    pcall(function() char:PivotTo(cf) end)
     root.AssemblyLinearVelocity=Vector3.zero
     root.AssemblyAngularVelocity=Vector3.zero
+    pcall(function() char:PivotTo(cf) end)
+
+    if holdDuration and holdDuration>0 then
+        self:HoldAt(cf,holdDuration)
+    end
     return true
 end
 
@@ -164,14 +207,15 @@ function Core:Pickup(id)
     if not item then self.LastStatus="waiting for "..self:Display(id) return false end
     local part=self:GetPart(item)
     if not part then return false end
-    self:MoveTo(part.CFrame+Vector3.new(0,2.5,0))
-    task.wait(0.05)
+    self:MoveTo(part.CFrame+Vector3.new(0,2.5,0),0.45)
+    task.wait(0.06)
     local click=item:FindFirstChildWhichIsA("ClickDetector",true)
     local prompt=item:FindFirstChildWhichIsA("ProximityPrompt",true)
     if click and fireclickdetector then pcall(fireclickdetector,click) end
     if prompt and fireproximityprompt then pcall(fireproximityprompt,prompt) end
     local untilAt=os.clock()+0.8
     repeat task.wait(0.04) until self:Owned(id) or os.clock()>=untilAt
+    self:StopHold()
     return self:Owned(id)~=nil
 end
 
@@ -200,8 +244,8 @@ function Core:Use(req)
     local host=req.Host
     local part=self:GetPart(host)
     if not part then return false end
-    self:MoveTo(part.CFrame+part.CFrame.LookVector*-1.5+Vector3.new(0,1,0))
-    task.wait(0.06)
+    self:MoveTo(part.CFrame+part.CFrame.LookVector*-1.5+Vector3.new(0,1,0),0.5)
+    task.wait(0.07)
     tool=self:Equip(req.Id)
     if not tool then return false end
     local handle=tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart",true)
@@ -213,6 +257,7 @@ function Core:Use(req)
     if prompt and fireproximityprompt then pcall(fireproximityprompt,prompt) end
     local untilAt=os.clock()+0.4
     repeat task.wait(0.04) until not self:RequirementActive(req) or os.clock()>=untilAt
+    self:StopHold()
     return not self:RequirementActive(req)
 end
 
