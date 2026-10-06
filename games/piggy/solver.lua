@@ -89,11 +89,14 @@ function Solver:Step()
     if not self.Core.Map then return "waiting for map" end
 
     if self.Core.MapName=="House" and not self:HouseWhiteKeyExists() then
-        if not self.HouseGears.RedGear then
+        local redAvailable=self.Core:Owned("RedGear") or self.Core:FindItem("RedGear")
+        local greenAvailable=self.Core:Owned("GreenGear") or self.Core:FindItem("GreenGear")
+
+        if not self.HouseGears.RedGear and redAvailable then
             self:UseGear("RedGear")
             return "House: Red Gear"
         end
-        if not self.HouseGears.GreenGear then
+        if not self.HouseGears.GreenGear and greenAvailable then
             self:UseGear("GreenGear")
             return "House: Green Gear"
         end
