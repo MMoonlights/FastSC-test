@@ -87,21 +87,25 @@ function Solver.runFreeInteractionStep()
 end
 
 function Solver.targetFromRequirement(value)
+    local exact = requirementEventPart and requirementEventPart(value)
+    if exact then return exact end
+
+    if value and value.Parent and value.Parent:IsA("BasePart") then
+        return value.Parent
+    end
+
     local host = requirementHost(value)
     if host and getPart(host) then return host end
 
     local current = value and value.Parent
     local fallback
-    for _ = 1, 7 do
+    for _ = 1, 5 do
         if not current or current == workspace then break end
         if items[current] then return nil end
-        if current:IsA("Model") or current:IsA("BasePart") then
-            local part = getPart(current)
-            if part then
-                fallback = fallback or current
-                local required = current:FindFirstChild("ToolRequired")
-                if required and required:IsA("StringValue") then return current end
-            end
+        if current:IsA("BasePart") then
+            fallback = fallback or current
+        elseif current:IsA("Model") and getPart(current) then
+            fallback = fallback or current
         end
         current = current.Parent
     end
@@ -227,9 +231,14 @@ function Synth.gearEventParts(id)
             and idFromText(object.Value) == id
             and not belongsToItem(object) then
 
+            local exact = requirementEventPart and requirementEventPart(object)
+            if exact then
+                add(exact, 0, "ToolRequired event", true)
+            end
+
             local parent = object.Parent
             if parent and parent:IsA("BasePart") then
-                add(parent, 0, "ToolRequired parent", true)
+                add(parent, 1, "ToolRequired parent", true)
             elseif parent then
                 for _, descendant in ipairs(parent:GetDescendants()) do
                     if descendant:IsA("BasePart") then
@@ -964,6 +973,9 @@ function Solver.preciseRequirementPart(objective)
     local requirement = objective and objective.Requirement
     local target = objective and objective.Target
     if not requirement or not requirement.Parent then return nil end
+
+    local exact = requirementEventPart and requirementEventPart(requirement)
+    if exact then return exact end
 
     local host = requirementHost(requirement) or requirement.Parent
     local targetPart = target and getPart(target) or nil
