@@ -281,9 +281,24 @@ assert "activeRequirementFor" in piggy
 assert "itemLockedByOtherRequirement" in piggy
 assert "houseObjectiveUnlocked" in piggy
 assert "gearEventParts" in piggy
-assert "houseGearObserved" in piggy
+assert "houseProgress" in piggy
+assert "houseObservedRequirements" in piggy
+assert "activateHouseFallback" in piggy
+assert "houseFallbackTarget" in piggy
 assert 'if whiteKey and isWorldItem(whiteKey) then' not in piggy
 assert 'item:FindFirstChild("ToolRequired", true)' in piggy
+
+for puzzle_kind in [
+    "DigitCode",
+    "ColorCode",
+    "RomanCode",
+    "ShapeWheel",
+    "LightCircle",
+    "ReactorLevers",
+    "BreakoutCircles",
+    "HuntSequence",
+]:
+    assert f"{puzzle_kind} =" in piggy, f"missing puzzle solver: {puzzle_kind}"
 
 intercity = texts["games/piggy-intercity/script.lua"]
 for token in [
