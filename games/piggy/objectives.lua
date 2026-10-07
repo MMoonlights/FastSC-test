@@ -165,7 +165,8 @@ end
 
 Synth = {}
 syntheticCompleted = {}
-houseGearObserved = {}
+houseProgress = {}
+houseObservedRequirements = {}
 houseShedAnchor = nil
 
 function Synth.isGearId(id)
@@ -362,51 +363,115 @@ function Synth.syntheticObjective(id, parentId)
     }
 end
 
-function Synth.reconcileSyntheticState()
+function Solver.observeHouseProgress()
     if currentMapName() ~= "House" then return end
 
-    for _, id in ipairs({"RedGear", "GreenGear"}) do
-        if requirementExists(id) then
-            houseGearObserved[id] = true
-            syntheticCompleted[id] = nil
-        elseif houseGearObserved[id] then
-            syntheticCompleted[id] = true
+    local stageIds = {
+        "GreenKey", "RedKey", "BlueKey",
+        "YellowKey", "KeyCode", "WhiteKey",
+        "RedGear", "GreenGear",
+    }
+
+    for _, id in ipairs(stageIds) do
+        local active = activeRequirementFor and activeRequirementFor(id) or nil
+        if active then
+            houseObservedRequirements[id] = true
+            if Synth.isGearId(id) then
+                syntheticCompleted[id] = nil
+            end
+        elseif houseObservedRequirements[id] then
+            houseProgress[id] = true
+            if Synth.isGearId(id) then
+                syntheticCompleted[id] = true
+            end
         end
     end
+
+    if findOwnedById then
+        if findOwnedById("RedKey") then houseProgress.GreenKey = true end
+        if findOwnedById("BlueKey") then houseProgress.RedKey = true end
+        if findOwnedById("KeyCode") then houseProgress.YellowKey = true end
+        if findOwnedById("WhiteKey") then
+            houseProgress.RedGear = true
+            houseProgress.GreenGear = true
+            syntheticCompleted.RedGear = true
+            syntheticCompleted.GreenGear = true
+        end
+    end
+end
+
+function Synth.reconcileSyntheticState()
+    Solver.observeHouseProgress()
 end
 
 function Solver.houseObjectiveUnlocked(id)
     if currentMapName() ~= "House" then return true end
 
+    Solver.observeHouseProgress()
+
     local owned = findOwnedById and findOwnedById(id)
     local world = findItemById and findItemById(id)
 
-    if id == "WhiteKey" then
-        return syntheticCompleted.RedGear == true
-            and syntheticCompleted.GreenGear == true
-            and (owned ~= nil or world ~= nil)
-    end
-
-    if id == "RedKey" and requirementExists("GreenKey") then
-        return false
-    end
-
-    if id == "BlueKey" and requirementExists("RedKey") then
-        return false
-    end
-
-    if Synth.isGearId(id) then
-        if requirementExists("BlueKey") then
-            return false
-        end
+    if id == "GreenKey" then
         return owned ~= nil or world ~= nil
     end
 
-    if id == "KeyCode" and requirementExists("YellowKey") then
-        return false
+    if id == "RedKey" then
+        if owned then return true end
+        return houseProgress.GreenKey == true and world ~= nil
+    end
+
+    if id == "BlueKey" then
+        if owned then return true end
+        return houseProgress.RedKey == true and world ~= nil
+    end
+
+    if id == "RedGear" or id == "GreenGear" then
+        return houseProgress.BlueKey == true and (owned ~= nil or world ~= nil)
+    end
+
+    if id == "WhiteKey" then
+        return houseProgress.RedGear == true
+            and houseProgress.GreenGear == true
+            and (owned ~= nil or world ~= nil)
+    end
+
+    if id == "KeyCode" then
+        if owned then return true end
+        return houseProgress.YellowKey == true and world ~= nil
     end
 
     return true
+end
+
+function Solver.markHouseObjective(objective, completed, toolConsumed, targetChanged)
+    if currentMapName() ~= "House" or not objective then return end
+
+    local id = objective.Id
+    local stage = id == "GreenKey"
+        or id == "RedKey"
+        or id == "BlueKey"
+        or id == "YellowKey"
+        or id == "KeyCode"
+        or id == "WhiteKey"
+        or id == "RedGear"
+        or id == "GreenGear"
+
+    if not stage or not (completed or toolConsumed or targetChanged) then return end
+
+    houseProgress[id] = true
+    houseObservedRequirements[id] = true
+
+    if id == "RedGear" or id == "GreenGear" then
+        syntheticCompleted[id] = true
+    end
+
+    if id == "BlueKey" then
+        local anchorPart = objective.Part or getPart(objective.Target)
+        if anchorPart and anchorPart.Parent then
+            houseShedAnchor = anchorPart.Position
+        end
+    end
 end
 function Solver.collectObjectives()
     Synth.reconcileSyntheticState()
@@ -438,7 +503,7 @@ function Solver.collectObjectives()
 
     local profile = mapProfiles[currentMapName()]
 
-    if currentMapName() == "House" and not requirementExists("BlueKey") then
+    if currentMapName() == "House" and houseProgress.BlueKey == true then
         for _, gearId in ipairs({"RedGear", "GreenGear"}) do
             if not syntheticCompleted[gearId] then
                 local ownedGear = findOwnedById and findOwnedById(gearId)
@@ -975,6 +1040,12 @@ function Solver.activateSyntheticGear(objective)
             point = eventPart.CFrame + Vector3.new(0, 1.1, 0)
         end
 
+        local partBefore = table.concat({
+            tostring(eventPart.CFrame),
+            tostring(eventPart.Transparency),
+            tostring(eventPart.CanCollide),
+        }, "|")
+
         beginAutomationMove(point)
         automationDeadline = os.clock() + 1.4
         task.wait(0.03)
@@ -1003,8 +1074,20 @@ function Solver.activateSyntheticGear(objective)
             task.wait(0.055)
 
             local consumed = startedOwned and not findOwnedById(objective.Id)
-            if consumed or requirementCleared() then
+            local changed = not eventPart.Parent
+            if eventPart.Parent then
+                local partNow = table.concat({
+                    tostring(eventPart.CFrame),
+                    tostring(eventPart.Transparency),
+                    tostring(eventPart.CanCollide),
+                }, "|")
+                changed = partNow ~= partBefore
+            end
+
+            if consumed or requirementCleared() or changed then
                 syntheticCompleted[objective.Id] = true
+                houseProgress[objective.Id] = true
+                houseObservedRequirements[objective.Id] = true
                 lastPickupStatus = "gear placed via " .. candidate.Source
                 itemUiDirty = true
                 endAutomationMove()
@@ -1126,24 +1209,21 @@ function Solver.activateObjective(objective)
         and not findOwnedById(objective.Id)
 
     local targetChanged = false
-    if objective.Synthetic then
-        if not objective.Target or not objective.Target.Parent then
-            targetChanged = true
-        elseif objective.Part and objective.Part.Parent then
-            local now = table.concat({
-                tostring(objective.Part.CFrame),
-                tostring(objective.Part.Transparency),
-                tostring(objective.Part.CanCollide),
-            }, "|")
-            targetChanged = now ~= targetPartBefore
-        elseif tostring(objective.Target:GetFullName()) ~= targetBefore then
-            targetChanged = true
-        end
+    if not objective.Target or not objective.Target.Parent then
+        targetChanged = true
+    elseif objective.Part and objective.Part.Parent then
+        local now = table.concat({
+            tostring(objective.Part.CFrame),
+            tostring(objective.Part.Transparency),
+            tostring(objective.Part.CanCollide),
+        }, "|")
+        targetChanged = now ~= targetPartBefore
+    elseif tostring(objective.Target:GetFullName()) ~= targetBefore then
+        targetChanged = true
     end
 
     local globalProgress = progressFingerprint() ~= before
-    local progressed = completed or toolConsumed
-        or (objective.Synthetic and targetChanged)
+    local progressed = completed or toolConsumed or targetChanged
         or (not objective.Synthetic and globalProgress)
 
     if objective.Synthetic and (toolConsumed or targetChanged) then
@@ -1152,12 +1232,7 @@ function Solver.activateObjective(objective)
         itemUiDirty = true
     end
 
-    if currentMapName() == "House" and objective.Id == "BlueKey" and (completed or progressed) then
-        local anchorPart = objective.Part or getPart(objective.Target)
-        if anchorPart and anchorPart.Parent then
-            houseShedAnchor = anchorPart.Position
-        end
-    end
+    Solver.markHouseObjective(objective, completed, toolConsumed, targetChanged)
 
     endAutomationMove()
     return ok and completed, ok and progressed
@@ -1335,7 +1410,8 @@ function Round.resetRoundAutomation()
     escapeAttempts = 0
     lastEscapeAttempt = 0
     syntheticCompleted = {}
-    houseGearObserved = {}
+    houseProgress = {}
+    houseObservedRequirements = {}
     houseShedAnchor = nil
     pickupRetryAt = {}
     pickupFailuresById = {}
@@ -1397,13 +1473,6 @@ function Round.autoCompleteStep()
         end
 
         if not objective then return end
-
-        if objective.Synthetic and Synth.isGearId(objective.Id)
-            and not activeRequirementFor(objective.Id)
-            and not findOwnedById(objective.Id)
-            and not findItemById(objective.Id) then
-            return
-        end
 
         local retryAt = pickupRetryAt[objective.Id]
         if retryAt and retryAt > os.clock() and not findOwnedById(objective.Id) then
