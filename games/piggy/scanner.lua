@@ -179,47 +179,89 @@ function currentEventsRoot()
         or map:FindFirstChild("Event")
 end
 
-function requirementEventMesh(parent)
-    if not parent then return false end
-    local mesh = parent:FindFirstChildWhichIsA("SpecialMesh", true)
+function isRequirementEventMesh(mesh)
     return mesh
+        and mesh:IsA("SpecialMesh")
         and cleanAssetId(mesh.MeshId) == "524497312"
         and (mesh.Scale - Vector3.new(0.75, 0.5, 0.75)).Magnitude <= 0.08
 end
 
-function requirementHost(value)
-    local current = value and value.Parent
-    local fallback
-    for _ = 1, 6 do
-        if not current or current == workspace then break end
-        if items[current] then return nil end
-        if current:IsA("BasePart") or current:IsA("Model") then
-            fallback = fallback or current
-            if requirementEventMesh(current) then return current end
-            if current:FindFirstChildWhichIsA("ClickDetector", true)
-                or current:FindFirstChildWhichIsA("ProximityPrompt", true)
-                or current:FindFirstChildWhichIsA("TouchTransmitter", true) then
-                return current
-            end
-            local lower = string.lower(current.Name)
-            if lower:find("door", 1, true)
-                or lower:find("gate", 1, true)
-                or lower:find("lock", 1, true)
-                or lower:find("safe", 1, true)
-                or lower:find("panel", 1, true)
-                or lower:find("power", 1, true)
-                or lower:find("gear", 1, true)
-                or lower:find("generator", 1, true)
-                or lower:find("machine", 1, true)
-                or lower:find("event", 1, true) then
-                return current
+function requirementEventPart(value)
+    if not value or not value.Parent then return nil end
+
+    local direct = value.Parent
+    if direct:IsA("BasePart") then
+        for _, child in ipairs(direct:GetChildren()) do
+            if child:IsA("BasePart") then
+                local mesh = child:FindFirstChildWhichIsA("SpecialMesh")
+                if isRequirementEventMesh(mesh) then
+                    return direct
+                end
             end
         end
-        current = current.Parent
     end
-    return fallback
+
+    local map = currentMapModel()
+    if not map then return direct:IsA("BasePart") and direct or nil end
+
+    for _, mesh in ipairs(map:GetDescendants()) do
+        if isRequirementEventMesh(mesh) then
+            local meshPart = mesh.Parent
+            local eventPart = meshPart and meshPart.Parent
+            if eventPart and eventPart:IsA("BasePart") then
+                for _, child in ipairs(eventPart:GetChildren()) do
+                    if child == value then
+                        return eventPart
+                    end
+                end
+            end
+        end
+    end
+
+    return direct:IsA("BasePart") and direct or nil
 end
 
+function requirementEventMesh(parent)
+    if not parent or not parent:IsA("BasePart") then return false end
+    for _, child in ipairs(parent:GetChildren()) do
+        if child:IsA("BasePart") then
+            local mesh = child:FindFirstChildWhichIsA("SpecialMesh")
+            if isRequirementEventMesh(mesh) then
+                return true
+            end
+        end
+    end
+    return false
+end
+function requirementHost(value)
+    if not value or not value.Parent then return nil end
+
+    local exact = requirementEventPart(value)
+    if exact then return exact end
+
+    local current = value.Parent
+    local fallback
+    for _ = 1, 5 do
+        if not current or current == workspace then break end
+        if items[current] then return nil end
+
+        if current:IsA("BasePart") then
+            fallback = fallback or current
+            local directRequirement = current:FindFirstChild("ToolRequired")
+                or current:FindFirstChild("RequiredTool")
+                or current:FindFirstChild("Requirement")
+            if directRequirement == value then
+                return current
+            end
+        elseif current:IsA("Model") then
+            fallback = fallback or current
+        end
+
+        current = current.Parent
+    end
+
+    return fallback
+end
 optionalObjectiveIds = {
     Ammo = true,
     Gun = true,
