@@ -208,8 +208,8 @@ function Synth.gearEventParts(id)
 
             if houseShedAnchor then
                 local distance = (part.Position - houseShedAnchor).Magnitude
-                if not exactForId and not eventMesh and distance > 45 then return end
-                finalRank += math.min(distance, 100) * 0.15
+                if not exactForId and distance > 32 then return end
+                finalRank += math.min(distance, 100) * 0.35
             end
         end
 
