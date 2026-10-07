@@ -1617,28 +1617,35 @@ function solveHuntSequence()
     return false
 end
 
+puzzleSolvers = {
+    DigitCode = solveDigitCode,
+    ColorCode = solveShipColorCode,
+    RomanCode = solveRomanCode,
+    ShapeWheel = solveShapeWheel,
+    LightCircle = solveCampLightCircle,
+    ReactorLevers = solveLabLevers,
+    BreakoutCircles = solveBreakout,
+    HuntSequence = solveHuntSequence,
+}
+
 function solveSpecialPuzzle(force)
     local mapName = currentMapName()
     local profile = mapProfiles[mapName]
     local puzzle = profile and profile.Puzzle
     if not puzzle then return false end
+    local solver = puzzleSolvers[puzzle]
+    if not solver then
+        puzzleStatus = puzzle .. ": solver missing"
+        return false
+    end
+
     local puzzleKey = mapName .. ":" .. puzzle
     local solvedAt = solvedPuzzles[puzzleKey]
     if solvedAt and not force and os.clock() - solvedAt < 1.5 then return false end
     if puzzleBusy or (not force and os.clock() < puzzleRetryAt) then return false end
 
     puzzleBusy = true
-    local ok, solved = pcall(function()
-        if puzzle == "DigitCode" then return solveDigitCode() end
-        if puzzle == "ColorCode" then return solveShipColorCode() end
-        if puzzle == "RomanCode" then return solveRomanCode() end
-        if puzzle == "ShapeWheel" then return solveShapeWheel() end
-        if puzzle == "LightCircle" then return solveCampLightCircle() end
-        if puzzle == "ReactorLevers" then return solveLabLevers() end
-        if puzzle == "BreakoutCircles" then return solveBreakout() end
-        if puzzle == "HuntSequence" then return solveHuntSequence() end
-        return false
-    end)
+    local ok, solved = pcall(solver)
     puzzleBusy = false
 
     if ok and solved then
