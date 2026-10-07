@@ -170,10 +170,6 @@ mapProfiles = {
             KeyCode = {"YellowKey"},
             WhiteKey = {"RedGear", "GreenGear"},
         },
-        Synthetic = {
-            WhiteKey = {"RedGear", "GreenGear"},
-        },
-        PreObjectives = {"RedGear", "GreenGear"},
         Priority = {
             GreenKey = 10, RedKey = 20, BlueKey = 30, Plank = 34, YellowKey = 35, OrangeKey = 40,
             Wrench = 42, RedGear = 45, GreenGear = 46, Hammer = 55, KeyCode = 57, WhiteKey = 100,
