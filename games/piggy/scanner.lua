@@ -384,6 +384,40 @@ function ancestorRequirementLocks(item)
     end
     return false
 end
+function activeRequirementFor(id)
+    if not id then return nil end
+    for value in pairs(requirements) do
+        if value.Parent and isObjectiveRequirement(value) and idFromText(value.Value) == id then
+            return value
+        end
+    end
+end
+
+function itemLockedByOtherRequirement(item, id)
+    local current = item
+    for _ = 1, 7 do
+        if not current or current == workspace then break end
+
+        for _, value in ipairs(current:GetDescendants()) do
+            if value:IsA("StringValue") and isObjectiveRequirement(value) then
+                local requiredId = idFromText(value.Value)
+                if requiredId and requiredId ~= id and requirementExists(requiredId) then
+                    return requiredId
+                end
+            end
+        end
+
+        if current:IsA("Folder") then
+            local name = token(current.Name)
+            if name == "items" or name == "itemfolder" or name == "itemfolder1"
+                or name:find("pickup", 1, true) or name:find("spawn", 1, true) then
+                break
+            end
+        end
+        current = current.Parent
+    end
+end
+
 function isAvailableWorldItem(item)
     if not isWorldItem(item) then return false end
     local part = getPart(item)
@@ -394,6 +428,11 @@ function isAvailableWorldItem(item)
 
     local profile = mapProfiles[map]
     local gate = profile and profile.Gates and profile.Gates[id]
+
+    local blockingId = itemLockedByOtherRequirement(item, id)
+    if blockingId then
+        return false
+    end
     if gate then
         for _, dependency in ipairs(gate.Present or {}) do
             if itemStagePresent(dependency) then return false end
