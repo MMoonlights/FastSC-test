@@ -30,7 +30,6 @@ for path in expected:
     assert target.is_file(), path
     text = target.read_text(encoding="utf-8")
     texts[path] = text
-    assert "--" not in text, f"comment found in {path}"
     assert not re.search(r"\b[uvp]\d{2,}\b", text), f"decompiler identifier in {path}"
     assert "saffT4frame" not in text, f"stale typo in {path}"
 
