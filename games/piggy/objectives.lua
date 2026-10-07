@@ -170,134 +170,85 @@ function Synth.isGearId(id)
     return id == "RedGear" or id == "GreenGear" or id == "WhiteGear" or id == "Gear"
 end
 
-function Synth.exactGearRequirement(id)
+function Synth.gearEventParts(id)
     local map = currentMapModel()
-    if not map or not Synth.isGearId(id) then return nil end
+    if not map or not Synth.isGearId(id) then return {} end
+
+    local result = {}
+    local seen = {}
+
+    local function add(part, rank, source)
+        if not part or not part:IsA("BasePart") or not part.Parent or seen[part] then return end
+        if belongsToItem(part) or itemObjectFrom(part) then return end
+        seen[part] = true
+        result[#result + 1] = {Part = part, Rank = rank or 1000, Source = source or "fallback"}
+    end
 
     for _, object in ipairs(map:GetDescendants()) do
         if object:IsA("StringValue")
             and object.Name == "ToolRequired"
             and idFromText(object.Value) == id
             and not belongsToItem(object) then
-            return object
-        end
-    end
-end
-
-function Synth.partFromGearRequirement(requirement)
-    if not requirement or not requirement.Parent then return nil end
-
-    if requirement.Parent:IsA("BasePart") then
-        return requirement.Parent
-    end
-
-    local container = requirement.Parent
-    local origin = getPart(container)
-    local best
-    local bestScore = -math.huge
-    local bestName
-
-    local function consider(part)
-        if not part or not part:IsA("BasePart") or not part.Parent then return end
-        if belongsToItem(part) or itemObjectFrom(part) then return end
-
-        local score = 0
-        local maxAxis = math.max(part.Size.X, part.Size.Y, part.Size.Z)
-        local volume = part.Size.X * part.Size.Y * part.Size.Z
-
-        if requirementEventMesh(part) then score += 2000 end
-        if part:FindFirstChildWhichIsA("TouchTransmitter", true) then score += 900 end
-        if part:FindFirstChildWhichIsA("ClickDetector", true) then score += 800 end
-        if part:FindFirstChildWhichIsA("ProximityPrompt", true) then score += 800 end
-        if part:FindFirstChild("ToolRequired") == requirement then score += 1800 end
-        if origin then score -= (part.Position - origin.Position).Magnitude * 2 end
-
-        score -= math.max(0, maxAxis - 6) * 20
-        score -= math.max(0, volume - 40) * 0.15
-
-        local fullName = tostring(part:GetFullName())
-        if score > bestScore or (score == bestScore and (not bestName or fullName < bestName)) then
-            best = part
-            bestScore = score
-            bestName = fullName
+            local parent = object.Parent
+            if parent and parent:IsA("BasePart") then
+                add(parent, 0, "ToolRequired parent")
+            elseif parent then
+                for _, descendant in ipairs(parent:GetDescendants()) do
+                    if descendant:IsA("BasePart") then
+                        if requirementEventMesh(descendant) then
+                            add(descendant, 1, "ToolRequired event mesh")
+                        elseif descendant:FindFirstChildWhichIsA("TouchTransmitter", true) then
+                            add(descendant, 2, "ToolRequired touch")
+                        elseif descendant:FindFirstChildWhichIsA("ClickDetector", true)
+                            or descendant:FindFirstChildWhichIsA("ProximityPrompt", true) then
+                            add(descendant, 3, "ToolRequired interaction")
+                        end
+                    end
+                end
+                add(getPart(parent), 4, "ToolRequired host")
+            end
         end
     end
 
-    if container:IsA("Model") or container:IsA("Folder") then
-        for _, descendant in ipairs(container:GetDescendants()) do
-            if descendant:IsA("BasePart") then consider(descendant) end
+    if #result == 0 then
+        for _, object in ipairs(map:GetDescendants()) do
+            if object:IsA("BasePart") and requirementEventMesh(object) then
+                add(object, 20, "gear event mesh")
+            end
         end
     end
 
-    if best and bestScore > -200 then return best end
-    return origin
+    if #result == 0 then
+        for _, object in ipairs(map:GetDescendants()) do
+            if object:IsA("BasePart") then
+                local text = ancestorText and ancestorText(object, 6) or string.lower(object.Name)
+                if text:find("gear", 1, true)
+                    or text:find("well", 1, true)
+                    or text:find("generator", 1, true) then
+                    if object:FindFirstChildWhichIsA("TouchTransmitter", true)
+                        or object:FindFirstChildWhichIsA("ClickDetector", true)
+                        or object:FindFirstChildWhichIsA("ProximityPrompt", true) then
+                        add(object, 50, "named interaction")
+                    end
+                end
+            end
+        end
+    end
+
+    table.sort(result, function(a, b)
+        if a.Rank ~= b.Rank then return a.Rank < b.Rank end
+        local av = a.Part.Size.X * a.Part.Size.Y * a.Part.Size.Z
+        local bv = b.Part.Size.X * b.Part.Size.Y * b.Part.Size.Z
+        if math.abs(av - bv) > 0.001 then return av < bv end
+        return tostring(a.Part:GetFullName()) < tostring(b.Part:GetFullName())
+    end)
+
+    return result
 end
 
 function Synth.syntheticUsePart(id, target)
-    local map = currentMapModel()
-    if not map or not Synth.isGearId(id) then
-        return target and getPart(target) or nil
-    end
-
-    local exactRequirement = Synth.exactGearRequirement(id)
-    if exactRequirement then
-        local exactPart = Synth.partFromGearRequirement(exactRequirement)
-        if exactPart then return exactPart end
-    end
-
-    local targetPart = target and getPart(target) or nil
-    local best
-    local bestScore = -math.huge
-    local bestName
-
-    local function scorePart(part)
-        if not part or not part:IsA("BasePart") or not part.Parent then return end
-        if belongsToItem(part) or itemObjectFrom(part) then return end
-
-        local text = ancestorText and ancestorText(part, 7) or string.lower(part.Name)
-        local score = 0
-        local maxAxis = math.max(part.Size.X, part.Size.Y, part.Size.Z)
-        local volume = part.Size.X * part.Size.Y * part.Size.Z
-
-        if requirementEventMesh(part) then score += 1200 end
-        if part:FindFirstChildWhichIsA("TouchTransmitter", true) then score += 600 end
-        if part:FindFirstChildWhichIsA("ClickDetector", true)
-            or part:FindFirstChildWhichIsA("ProximityPrompt", true) then
-            score += 500
-        end
-        if text:find("gearbox", 1, true) then score += 300 end
-        if text:find("gear", 1, true) then score += 180 end
-        if text:find("generator", 1, true) then score += 120 end
-        if text:find("shed", 1, true) then score += 60 end
-        if text:find("well", 1, true) then score -= 200 end
-        if text:find("bucket", 1, true) then score -= 250 end
-        if target and (part == targetPart or part:IsDescendantOf(target)) then score += 180 end
-
-        score -= math.max(0, maxAxis - 7) * 15
-        score -= math.max(0, volume - 60) * 0.1
-
-        local fullName = tostring(part:GetFullName())
-        if score > bestScore or (score == bestScore and (not bestName or fullName < bestName)) then
-            best = part
-            bestScore = score
-            bestName = fullName
-        end
-    end
-
-    if target then
-        if target:IsA("BasePart") then scorePart(target) end
-        for _, descendant in ipairs(target:GetDescendants()) do
-            if descendant:IsA("BasePart") then scorePart(descendant) end
-        end
-    end
-
-    if not best or bestScore < 250 then
-        for _, descendant in ipairs(map:GetDescendants()) do
-            if descendant:IsA("BasePart") then scorePart(descendant) end
-        end
-    end
-
-    return best or targetPart
+    local candidates = Synth.gearEventParts(id)
+    return candidates[1] and candidates[1].Part or (target and getPart(target) or nil)
 end
 
 function Synth.syntheticTarget(id)
@@ -305,43 +256,30 @@ function Synth.syntheticTarget(id)
     if not map then return nil end
 
     if Synth.isGearId(id) then
-        local exactRequirement = Synth.exactGearRequirement(id)
-        local exactPart = exactRequirement and Synth.partFromGearRequirement(exactRequirement)
-        if exactPart then return exactPart end
+        local candidates = Synth.gearEventParts(id)
+        if candidates[1] then return candidates[1].Part end
     end
 
     local best
     local bestScore = -math.huge
-    local bestName
     for _, object in ipairs(map:GetDescendants()) do
         if object:IsA("Model") or object:IsA("BasePart") then
             local part = getPart(object)
             if part and not belongsToItem(part) then
                 local text = ancestorText and ancestorText(object, 6) or string.lower(object.Name)
                 local score = 0
-
-                if requirementEventMesh(object) then score += 80 end
-                if object:FindFirstChildWhichIsA("TouchTransmitter", true) then score += 50 end
-                if object:FindFirstChildWhichIsA("ClickDetector", true)
-                    or object:FindFirstChildWhichIsA("ProximityPrompt", true) then
-                    score += 40
-                end
-                if text:find("gearbox", 1, true) then score += 30 end
                 if text:find("gear", 1, true) then score += 20 end
-                if text:find("generator", 1, true) then score += 15 end
-                if text:find("machine", 1, true) then score += 8 end
-                if text:find("shed", 1, true) then score += 8 end
-                if text:find("well", 1, true) then score -= 20 end
-                if text:find("bucket", 1, true) then score -= 20 end
-
-                local maxAxis = math.max(part.Size.X, part.Size.Y, part.Size.Z)
-                score -= math.max(0, maxAxis - 8)
-
-                local fullName = tostring(object:GetFullName())
-                if score > bestScore or (score == bestScore and (not bestName or fullName < bestName)) then
+                if text:find("generator", 1, true) then score += 16 end
+                if text:find("well", 1, true) then score += 14 end
+                if requirementEventMesh(object) then score += 40 end
+                if object:FindFirstChildWhichIsA("TouchTransmitter", true)
+                    or object:FindFirstChildWhichIsA("ClickDetector", true)
+                    or object:FindFirstChildWhichIsA("ProximityPrompt", true) then
+                    score += 20
+                end
+                if score > bestScore then
                     best = object
                     bestScore = score
-                    bestName = fullName
                 end
             end
         end
@@ -892,78 +830,98 @@ function Solver.activateSyntheticGear(objective)
     local tool = Solver.ensureEquipped(objective.Id, 0.45)
     if not tool or tool.Parent ~= character then return false, false end
 
-    local requirement = Synth.exactGearRequirement(objective.Id)
-    local eventPart = requirement and Synth.partFromGearRequirement(requirement)
-        or Synth.syntheticUsePart(objective.Id, objective.Target)
-    if not eventPart or not eventPart.Parent then
-        lastPickupStatus = "gear mechanism part not found"
+    local candidates = Synth.gearEventParts(objective.Id)
+    if #candidates == 0 then
+        lastPickupStatus = "gear mechanism event not found"
         return false, false
     end
 
-    objective.Target = eventPart
-    objective.Part = eventPart
-    objective.UsePart = eventPart
-
     local before = progressFingerprint()
-    local handle = tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart", true)
-    local startOwned = findOwnedById(objective.Id)
+    local startedOwned = findOwnedById(objective.Id) ~= nil
 
-    local point = eventPart.CFrame + Vector3.new(0, 1.1, 0)
-    beginAutomationMove(point)
-    automationDeadline = os.clock() + 1.25
-    task.wait(0.025)
+    for index, candidate in ipairs(candidates) do
+        if index > 6 then break end
+        if not autoComplete then break end
 
-    local click = eventPart:FindFirstChildWhichIsA("ClickDetector", true)
-    local prompt = eventPart:FindFirstChildWhichIsA("ProximityPrompt", true)
+        local eventPart = candidate.Part
+        if not eventPart or not eventPart.Parent then continue end
 
-    for _ = 1, 3 do
-        tool = Solver.ensureEquipped(objective.Id, 0.12) or tool
-        handle = tool and (tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart", true)) or handle
+        tool = Solver.ensureEquipped(objective.Id, 0.18)
+        if not tool or tool.Parent ~= character then break end
 
-        if handle and handle.Parent and firetouchinterest then
-            pcall(function()
-                firetouchinterest(handle, eventPart, 0)
-                task.wait(0.012)
-                firetouchinterest(handle, eventPart, 1)
-            end)
+        objective.Target = eventPart
+        objective.Part = eventPart
+        objective.UsePart = eventPart
+
+        local maxAxis = math.max(eventPart.Size.X, eventPart.Size.Y, eventPart.Size.Z)
+        local point
+        if maxAxis > 8 then
+            local direction = root.Position - eventPart.Position
+            if direction.Magnitude < 0.01 then direction = -eventPart.CFrame.LookVector end
+            direction = direction.Unit
+            local distance = math.min(maxAxis * 0.5 + 1.2, 6)
+            point = CFrame.new(eventPart.Position + direction * distance + Vector3.new(0, 1, 0), eventPart.Position)
+        else
+            point = eventPart.CFrame + Vector3.new(0, 1.1, 0)
         end
 
-        if tool and tool.Parent == character then
-            pcall(function() tool:Activate() end)
-        end
-        if click and fireclickdetector then pcall(fireclickdetector, click) end
-        if prompt and fireproximityprompt then pcall(fireproximityprompt, prompt) end
+        beginAutomationMove(point)
+        automationDeadline = os.clock() + 1.4
+        task.wait(0.03)
 
-        task.wait(0.045)
+        local click = eventPart:FindFirstChildWhichIsA("ClickDetector", true)
+        local prompt = eventPart:FindFirstChildWhichIsA("ProximityPrompt", true)
+
+        for _ = 1, 2 do
+            tool = Solver.ensureEquipped(objective.Id, 0.12) or tool
+            local handle = tool and (tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart", true))
+
+            if handle and handle.Parent and firetouchinterest then
+                pcall(function()
+                    firetouchinterest(handle, eventPart, 0)
+                    task.wait(0.015)
+                    firetouchinterest(handle, eventPart, 1)
+                end)
+            end
+
+            if tool and tool.Parent == character then
+                pcall(function() tool:Activate() end)
+            end
+            if click and fireclickdetector then pcall(fireclickdetector, click) end
+            if prompt and fireproximityprompt then pcall(fireproximityprompt, prompt) end
+
+            task.wait(0.055)
+
+            local stillOwned = findOwnedById(objective.Id)
+            local whiteKey = currentMapName() == "House" and findItemById and findItemById("WhiteKey") or nil
+            if not stillOwned or progressFingerprint() ~= before or (whiteKey and isWorldItem(whiteKey)) then
+                break
+            end
+        end
 
         local stillOwned = findOwnedById(objective.Id)
         local whiteKey = currentMapName() == "House" and findItemById and findItemById("WhiteKey") or nil
-        if not stillOwned or (whiteKey and isWorldItem(whiteKey)) or progressFingerprint() ~= before then
-            break
+        local progressed = (startedOwned and not stillOwned)
+            or progressFingerprint() ~= before
+            or (whiteKey and isWorldItem(whiteKey))
+
+        if progressed then
+            syntheticCompleted[objective.Id] = true
+            if whiteKey and isWorldItem(whiteKey) then
+                syntheticCompleted.RedGear = true
+                syntheticCompleted.GreenGear = true
+            end
+            lastPickupStatus = "gear placed via " .. candidate.Source
+            itemUiDirty = true
+            endAutomationMove()
+            return true, true
         end
     end
 
-    local stillOwned = findOwnedById(objective.Id)
-    local whiteKey = currentMapName() == "House" and findItemById and findItemById("WhiteKey") or nil
-    local consumed = startOwned and not stillOwned
-    local progressed = consumed or progressFingerprint() ~= before or (whiteKey and isWorldItem(whiteKey))
-
-    if progressed then
-        syntheticCompleted[objective.Id] = true
-        if whiteKey and isWorldItem(whiteKey) then
-            syntheticCompleted.RedGear = true
-            syntheticCompleted.GreenGear = true
-        end
-        lastPickupStatus = "gear placed: " .. tostring(eventPart.Name)
-        itemUiDirty = true
-    else
-        lastPickupStatus = "gear use not confirmed: " .. tostring(eventPart.Name)
-    end
-
+    lastPickupStatus = "gear mechanism did not accept tool"
     endAutomationMove()
-    return progressed, progressed
+    return false, false
 end
-
 function Solver.activateObjective(objective)
     if not objective or not objective.Target or not objective.Target.Parent then return false end
 
