@@ -331,6 +331,26 @@ function Synth.reconcileSyntheticState()
     if currentMapName() ~= "House" then return end
 end
 
+function Solver.houseObjectiveUnlocked(id)
+    if currentMapName() ~= "House" then return true end
+
+    local owned = findOwnedById and findOwnedById(id)
+    local world = findItemById and findItemById(id)
+    if owned or world then return true end
+
+    if id == "WhiteKey" then
+        -- The exit lock exists from map start, but it is not an actionable
+        -- objective until the White Key has actually spawned/been obtained.
+        return false
+    end
+
+    if Synth.isGearId(id) then
+        return activeRequirementFor and activeRequirementFor(id) ~= nil
+    end
+
+    return true
+end
+
 function Solver.collectObjectives()
     Synth.reconcileSyntheticState()
     local result = {}
@@ -338,7 +358,7 @@ function Solver.collectObjectives()
     for value in pairs(requirements) do
         if value.Parent and isObjectiveRequirement(value) and not belongsToItem(value) then
             local id = idFromText(value.Value)
-            if id then
+            if id and Solver.houseObjectiveUnlocked(id) then
                 local target = Solver.targetFromRequirement(value)
                 local part = target and getPart(target)
                 if target and part then
