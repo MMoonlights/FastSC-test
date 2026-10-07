@@ -182,8 +182,41 @@ function Synth.gearEventParts(id)
     local function add(part, rank, source)
         if not part or not part:IsA("BasePart") or not part.Parent or seen[part] then return end
         if belongsToItem(part) or itemObjectFrom(part) then return end
+
+        local exactRequirement = part:FindFirstChild("ToolRequired")
+        local exactForId = exactRequirement
+            and exactRequirement:IsA("StringValue")
+            and idFromText(exactRequirement.Value) == id
+        local eventMesh = requirementEventMesh(part)
+        local hasInteraction = part:FindFirstChildWhichIsA("TouchTransmitter", true)
+            or part:FindFirstChildWhichIsA("ClickDetector", true)
+            or part:FindFirstChildWhichIsA("ProximityPrompt", true)
+
+        local maxAxis = math.max(part.Size.X, part.Size.Y, part.Size.Z)
+        local volume = part.Size.X * part.Size.Y * part.Size.Z
+        local text = ancestorText and ancestorText(part, 7) or string.lower(part.Name)
+
+        if not exactForId and not eventMesh and maxAxis > 14 then return end
+        if not exactForId and not eventMesh and not hasInteraction then return end
+
+        local finalRank = rank or 1000
+        if currentMapName() == "House" then
+            if text:find("shed", 1, true) then finalRank -= 20 end
+            if text:find("gearbox", 1, true) or text:find("gear box", 1, true) then finalRank -= 25 end
+            if text:find("well", 1, true) then finalRank += 25 end
+
+            if houseShedAnchor then
+                local distance = (part.Position - houseShedAnchor).Magnitude
+                if not exactForId and not eventMesh and distance > 45 then return end
+                finalRank += math.min(distance, 100) * 0.15
+            end
+        end
+
+        finalRank += math.max(0, maxAxis - 5) * 0.5
+        finalRank += math.max(0, volume - 40) * 0.002
+
         seen[part] = true
-        result[#result + 1] = {Part = part, Rank = rank or 1000, Source = source or "fallback"}
+        result[#result + 1] = {Part = part, Rank = finalRank, Source = source or "fallback"}
     end
 
     for _, object in ipairs(map:GetDescendants()) do
