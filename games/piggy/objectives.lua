@@ -165,6 +165,7 @@ end
 
 Synth = {}
 syntheticCompleted = {}
+houseGearObserved = {}
 
 function Synth.isGearId(id)
     return id == "RedGear" or id == "GreenGear" or id == "WhiteGear" or id == "Gear"
@@ -329,6 +330,15 @@ end
 
 function Synth.reconcileSyntheticState()
     if currentMapName() ~= "House" then return end
+
+    for _, id in ipairs({"RedGear", "GreenGear"}) do
+        if requirementExists(id) then
+            houseGearObserved[id] = true
+            syntheticCompleted[id] = nil
+        elseif houseGearObserved[id] then
+            syntheticCompleted[id] = true
+        end
+    end
 end
 
 function Solver.houseObjectiveUnlocked(id)
@@ -1089,17 +1099,6 @@ function Solver.activateObjective(objective)
         itemUiDirty = true
     end
 
-    if currentMapName() == "House" then
-        local whiteKey = findItemById and findItemById("WhiteKey")
-        if whiteKey and isWorldItem(whiteKey) then
-            syntheticCompleted.RedGear = true
-            syntheticCompleted.GreenGear = true
-            completed = objective.Synthetic and true or completed
-            progressed = true
-            itemUiDirty = true
-        end
-    end
-
     endAutomationMove()
     return ok and completed, ok and progressed
 end
@@ -1276,6 +1275,7 @@ function Round.resetRoundAutomation()
     escapeAttempts = 0
     lastEscapeAttempt = 0
     syntheticCompleted = {}
+    houseGearObserved = {}
     pickupRetryAt = {}
     pickupFailuresById = {}
     objectiveFailures = setmetatable({}, {__mode = "k"})
