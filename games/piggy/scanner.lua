@@ -19,7 +19,15 @@ end
 function treeId(item)
     local values = {item.Name}
     for _, descendant in ipairs(item:GetDescendants()) do
-        values[#values + 1] = descendant.Name
+        -- Requirement values describe what opens/unlocks an object, not the
+        -- identity of the object itself. Including ToolRequired descendants
+        -- can misclassify a locked pickup/container as the key that opens it.
+        if not (descendant:IsA("StringValue")
+            and (descendant.Name == "ToolRequired"
+                or descendant.Name == "RequiredTool"
+                or descendant.Name == "Requirement")) then
+            values[#values + 1] = descendant.Name
+        end
     end
     local joined = token(table.concat(values, " "))
     for alias, id in pairs(aliases) do
