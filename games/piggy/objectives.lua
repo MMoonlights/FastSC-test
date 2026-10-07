@@ -473,6 +473,115 @@ function Solver.markHouseObjective(objective, completed, toolConsumed, targetCha
         end
     end
 end
+
+houseFallbackSpecs = {
+    GreenKey = {Color = "Green", Words = {"door", "lock"}},
+    RedKey = {Color = "Red", Words = {"door", "lock"}},
+    BlueKey = {Color = "Blue", Words = {"door", "lock", "shed"}},
+    YellowKey = {Color = "Yellow", Words = {"safe", "lock"}},
+    WhiteKey = {Color = "White", Words = {"exit", "door", "lock"}},
+    KeyCode = {Words = {"code", "keypad", "number", "lock"}},
+}
+
+function Solver.houseFallbackTarget(id)
+    if currentMapName() ~= "House" then return nil end
+
+    local spec = houseFallbackSpecs[id]
+    local map = currentMapModel()
+    if not spec or not map then return nil end
+
+    local best
+    local bestScore = -math.huge
+    local bestName
+
+    for _, part in ipairs(map:GetDescendants()) do
+        if part:IsA("BasePart")
+            and part.Parent
+            and not belongsToItem(part)
+            and not itemObjectFrom(part) then
+
+            local score = 0
+            local text = ancestorText and ancestorText(part, 7) or string.lower(part.Name)
+            local required = part:FindFirstChild("ToolRequired", true)
+            local hasInteraction = part:FindFirstChildWhichIsA("TouchTransmitter", true)
+                or part:FindFirstChildWhichIsA("ClickDetector", true)
+                or part:FindFirstChildWhichIsA("ProximityPrompt", true)
+
+            if required and required:IsA("StringValue") and idFromText(required.Value) == id then
+                score += 1500
+            end
+
+            if hasInteraction then score += 220 end
+
+            if spec.Color and brickColors[part.BrickColor.Name] == spec.Color then
+                score += 260
+            end
+
+            for _, word in ipairs(spec.Words or {}) do
+                if text:find(word, 1, true) then score += 90 end
+            end
+
+            if id == "BlueKey" and text:find("shed", 1, true) then score += 700 end
+            if id == "YellowKey" and text:find("safe", 1, true) then score += 500 end
+            if id == "WhiteKey" and (text:find("exit", 1, true) or text:find("front", 1, true)) then score += 500 end
+            if id == "KeyCode" and text:find("keypad", 1, true) then score += 600 end
+
+            local maxAxis = math.max(part.Size.X, part.Size.Y, part.Size.Z)
+            local volume = part.Size.X * part.Size.Y * part.Size.Z
+            score -= math.max(0, maxAxis - 7) * 20
+            score -= math.max(0, volume - 80) * 0.08
+
+            local fullName = tostring(part:GetFullName())
+            if score > bestScore or (score == bestScore and (not bestName or fullName < bestName)) then
+                best = part
+                bestScore = score
+                bestName = fullName
+            end
+        end
+    end
+
+    if bestScore >= 220 then return best end
+end
+
+function Solver.addHouseFallbackObjectives(result, seen)
+    if currentMapName() ~= "House" then return end
+
+    local stages = {"GreenKey", "RedKey", "BlueKey", "YellowKey", "WhiteKey", "KeyCode"}
+    for _, id in ipairs(stages) do
+        if not houseProgress[id] and Solver.houseObjectiveUnlocked(id) then
+            local exists = false
+            for _, objective in ipairs(result) do
+                if objective.Id == id then
+                    exists = true
+                    break
+                end
+            end
+
+            if not exists then
+                local owned = findOwnedById and findOwnedById(id)
+                local world = findItemById and findItemById(id)
+                if owned or world then
+                    local target = Solver.houseFallbackTarget(id)
+                    if target then
+                        local key = "HouseFallback:" .. id .. ":" .. tostring(target)
+                        if not seen[key] then
+                            seen[key] = true
+                            result[#result + 1] = {
+                                Id = id,
+                                ItemName = displayNames[id] or id,
+                                Target = target,
+                                Part = target,
+                                TargetName = Solver.readableTargetName(id, target),
+                                Requirement = nil,
+                                HouseFallback = true,
+                            }
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
 function Solver.collectObjectives()
     Synth.reconcileSyntheticState()
     local result = {}
@@ -500,6 +609,8 @@ function Solver.collectObjectives()
             end
         end
     end
+
+    Solver.addHouseFallbackObjectives(result, seen)
 
     local profile = mapProfiles[currentMapName()]
 
@@ -987,6 +1098,85 @@ function Solver.ensureEquipped(id, timeout)
     return nil
 end
 
+function Solver.activateHouseFallback(objective)
+    if not objective or not objective.HouseFallback or not objective.Target or not objective.Target.Parent then
+        return false, false
+    end
+
+    local character = localPlayer.Character
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    if not character or not root then return false, false end
+
+    local tool = Solver.ensureEquipped(objective.Id, 0.5)
+    if not tool or tool.Parent ~= character then
+        return false, false
+    end
+
+    local part = objective.Part or getPart(objective.Target)
+    if not part or not part.Parent then return false, false end
+
+    local before = table.concat({
+        tostring(part.CFrame),
+        tostring(part.Transparency),
+        tostring(part.CanCollide),
+        tostring(part.Parent),
+    }, "|")
+    local startedOwned = findOwnedById(objective.Id) ~= nil
+    local handle = tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart", true)
+
+    local point = part.CFrame + part.CFrame.LookVector * -1.25 + Vector3.new(0, 1, 0)
+    beginAutomationMove(point)
+    automationDeadline = os.clock() + 1.5
+    task.wait(0.04)
+
+    for _ = 1, 3 do
+        tool = Solver.ensureEquipped(objective.Id, 0.15) or tool
+        handle = tool and (tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart", true)) or handle
+
+        if handle and handle.Parent and firetouchinterest then
+            pcall(function()
+                firetouchinterest(handle, part, 0)
+                task.wait(0.015)
+                firetouchinterest(handle, part, 1)
+            end)
+        end
+
+        if tool and tool.Parent == character then
+            pcall(function() tool:Activate() end)
+        end
+
+        local click = part:FindFirstChildWhichIsA("ClickDetector", true)
+        local prompt = part:FindFirstChildWhichIsA("ProximityPrompt", true)
+        if click and fireclickdetector then pcall(fireclickdetector, click) end
+        if prompt and fireproximityprompt then pcall(fireproximityprompt, prompt) end
+
+        task.wait(0.06)
+
+        local consumed = startedOwned and not findOwnedById(objective.Id)
+        local changed = not part.Parent
+        if part.Parent then
+            local now = table.concat({
+                tostring(part.CFrame),
+                tostring(part.Transparency),
+                tostring(part.CanCollide),
+                tostring(part.Parent),
+            }, "|")
+            changed = now ~= before
+        end
+
+        if consumed or changed then
+            Solver.markHouseObjective(objective, true, consumed, changed)
+            lastPickupStatus = "House stage completed: " .. tostring(objective.Id)
+            endAutomationMove()
+            return true, true
+        end
+    end
+
+    lastPickupStatus = "House lock did not accept " .. tostring(objective.Id)
+    endAutomationMove()
+    return false, false
+end
+
 function Solver.activateSyntheticGear(objective)
     if not objective or not Synth.isGearId(objective.Id) then return false, false end
 
@@ -1102,6 +1292,10 @@ function Solver.activateSyntheticGear(objective)
 end
 function Solver.activateObjective(objective)
     if not objective or not objective.Target or not objective.Target.Parent then return false end
+
+    if objective.HouseFallback then
+        return Solver.activateHouseFallback(objective)
+    end
 
     if currentMapName() == "House" and Synth.isGearId(objective.Id) then
         return Solver.activateSyntheticGear(objective)
