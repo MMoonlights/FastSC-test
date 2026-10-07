@@ -163,12 +163,7 @@ aliases[token("Blue Egg")] = "BlueEgg"
 mapProfiles = {
     House = {
         Gates = {
-            WhiteKey = {Synthetic = {"RedGear", "GreenGear"}},
             KeyCode = {Active = {"YellowKey"}},
-        },
-        Depends = {
-            KeyCode = {"YellowKey"},
-            WhiteKey = {"RedGear", "GreenGear"},
         },
         Priority = {
             GreenKey = 10, RedKey = 20, BlueKey = 30, Plank = 34, YellowKey = 35, OrangeKey = 40,
