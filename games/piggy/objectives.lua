@@ -336,21 +336,35 @@ function Solver.houseObjectiveUnlocked(id)
 
     local owned = findOwnedById and findOwnedById(id)
     local world = findItemById and findItemById(id)
-    if owned or world then return true end
 
     if id == "WhiteKey" then
-        -- The exit lock exists from map start, but it is not an actionable
-        -- objective until the White Key has actually spawned/been obtained.
+        return syntheticCompleted.RedGear == true
+            and syntheticCompleted.GreenGear == true
+            and (owned ~= nil or world ~= nil)
+    end
+
+    if id == "RedKey" and requirementExists("GreenKey") then
+        return false
+    end
+
+    if id == "BlueKey" and requirementExists("RedKey") then
         return false
     end
 
     if Synth.isGearId(id) then
+        if requirementExists("BlueKey") then
+            return false
+        end
         return activeRequirementFor and activeRequirementFor(id) ~= nil
+            and (owned ~= nil or world ~= nil)
+    end
+
+    if id == "KeyCode" and requirementExists("YellowKey") then
+        return false
     end
 
     return true
 end
-
 function Solver.collectObjectives()
     Synth.reconcileSyntheticState()
     local result = {}
@@ -852,13 +866,24 @@ function Solver.activateSyntheticGear(objective)
     local tool = Solver.ensureEquipped(objective.Id, 0.45)
     if not tool or tool.Parent ~= character then return false, false end
 
+    local requirement = objective.Requirement or (activeRequirementFor and activeRequirementFor(objective.Id))
+    if not requirement or not requirement.Parent then
+        lastPickupStatus = "gear slot is not active"
+        return false, false
+    end
+
     local candidates = Synth.gearEventParts(objective.Id)
     if #candidates == 0 then
         lastPickupStatus = "gear mechanism event not found"
         return false, false
     end
 
-    local before = progressFingerprint()
+    local function requirementCleared()
+        return not requirement.Parent
+            or not requirement:IsDescendantOf(currentMapModel())
+            or idFromText(requirement.Value) ~= objective.Id
+    end
+
     local startedOwned = findOwnedById(objective.Id) ~= nil
 
     for index, candidate in ipairs(candidates) do
@@ -914,29 +939,14 @@ function Solver.activateSyntheticGear(objective)
 
             task.wait(0.055)
 
-            local stillOwned = findOwnedById(objective.Id)
-            local whiteKey = currentMapName() == "House" and findItemById and findItemById("WhiteKey") or nil
-            if not stillOwned or progressFingerprint() ~= before or (whiteKey and isWorldItem(whiteKey)) then
-                break
+            local consumed = startedOwned and not findOwnedById(objective.Id)
+            if consumed or requirementCleared() then
+                syntheticCompleted[objective.Id] = true
+                lastPickupStatus = "gear placed via " .. candidate.Source
+                itemUiDirty = true
+                endAutomationMove()
+                return true, true
             end
-        end
-
-        local stillOwned = findOwnedById(objective.Id)
-        local whiteKey = currentMapName() == "House" and findItemById and findItemById("WhiteKey") or nil
-        local progressed = (startedOwned and not stillOwned)
-            or progressFingerprint() ~= before
-            or (whiteKey and isWorldItem(whiteKey))
-
-        if progressed then
-            syntheticCompleted[objective.Id] = true
-            if whiteKey and isWorldItem(whiteKey) then
-                syntheticCompleted.RedGear = true
-                syntheticCompleted.GreenGear = true
-            end
-            lastPickupStatus = "gear placed via " .. candidate.Source
-            itemUiDirty = true
-            endAutomationMove()
-            return true, true
         end
     end
 
@@ -947,7 +957,7 @@ end
 function Solver.activateObjective(objective)
     if not objective or not objective.Target or not objective.Target.Parent then return false end
 
-    if objective.Synthetic and Synth.isGearId(objective.Id) then
+    if currentMapName() == "House" and Synth.isGearId(objective.Id) then
         return Solver.activateSyntheticGear(objective)
     end
 
