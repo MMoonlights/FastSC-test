@@ -166,6 +166,7 @@ end
 Synth = {}
 syntheticCompleted = {}
 houseGearObserved = {}
+houseShedAnchor = nil
 
 function Synth.isGearId(id)
     return id == "RedGear" or id == "GreenGear" or id == "WhiteGear" or id == "Gear"
@@ -365,8 +366,7 @@ function Solver.houseObjectiveUnlocked(id)
         if requirementExists("BlueKey") then
             return false
         end
-        return activeRequirementFor and activeRequirementFor(id) ~= nil
-            and (owned ~= nil or world ~= nil)
+        return owned ~= nil or world ~= nil
     end
 
     if id == "KeyCode" and requirementExists("YellowKey") then
@@ -404,6 +404,29 @@ function Solver.collectObjectives()
     end
 
     local profile = mapProfiles[currentMapName()]
+
+    if currentMapName() == "House" and not requirementExists("BlueKey") then
+        for _, gearId in ipairs({"RedGear", "GreenGear"}) do
+            if not syntheticCompleted[gearId] then
+                local ownedGear = findOwnedById and findOwnedById(gearId)
+                local worldGear = findItemById and findItemById(gearId)
+                local alreadyActive = false
+                for _, existing in ipairs(result) do
+                    if existing.Id == gearId then
+                        alreadyActive = true
+                        break
+                    end
+                end
+                if not alreadyActive and (ownedGear or worldGear) then
+                    local synthetic = Synth.syntheticObjective(gearId, "HouseGearbox")
+                    if synthetic and synthetic.Part then
+                        result[#result + 1] = synthetic
+                    end
+                end
+            end
+        end
+    end
+
     if profile and profile.PreObjectives then
         for _, dependency in ipairs(profile.PreObjectives) do
             if not syntheticCompleted[dependency] then
@@ -877,10 +900,6 @@ function Solver.activateSyntheticGear(objective)
     if not tool or tool.Parent ~= character then return false, false end
 
     local requirement = objective.Requirement or (activeRequirementFor and activeRequirementFor(objective.Id))
-    if not requirement or not requirement.Parent then
-        lastPickupStatus = "gear slot is not active"
-        return false, false
-    end
 
     local candidates = Synth.gearEventParts(objective.Id)
     if #candidates == 0 then
@@ -889,6 +908,7 @@ function Solver.activateSyntheticGear(objective)
     end
 
     local function requirementCleared()
+        if not requirement then return false end
         return not requirement.Parent
             or not requirement:IsDescendantOf(currentMapModel())
             or idFromText(requirement.Value) ~= objective.Id
@@ -1099,6 +1119,13 @@ function Solver.activateObjective(objective)
         itemUiDirty = true
     end
 
+    if currentMapName() == "House" and objective.Id == "BlueKey" and (completed or progressed) then
+        local anchorPart = objective.Part or getPart(objective.Target)
+        if anchorPart and anchorPart.Parent then
+            houseShedAnchor = anchorPart.Position
+        end
+    end
+
     endAutomationMove()
     return ok and completed, ok and progressed
 end
@@ -1276,6 +1303,7 @@ function Round.resetRoundAutomation()
     lastEscapeAttempt = 0
     syntheticCompleted = {}
     houseGearObserved = {}
+    houseShedAnchor = nil
     pickupRetryAt = {}
     pickupFailuresById = {}
     objectiveFailures = setmetatable({}, {__mode = "k"})
