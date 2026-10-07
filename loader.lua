@@ -39,16 +39,11 @@ local function fetchUrl(url, key, ttl)
 end
 
 local function source(path)
-    -- Local repo files are opt-in for development only. Production/re-execute
-    -- always follows GitHub main so stale executor files cannot shadow fixes.
     local useLocal = env.FastSCDevLocal == true
     if useLocal and isfile and readfile and isfile(localPath(path)) then
         return readfile(localPath(path))
     end
 
-    -- Repository Lua modules are development code and must not reuse a stale
-    -- in-memory source after re-execute. Keep the previous copy only as a
-    -- network-failure fallback.
     local key = "repo:" .. path
     local cached = sourceCache[key]
     local lastError
