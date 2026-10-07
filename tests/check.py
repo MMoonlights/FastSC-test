@@ -281,6 +281,8 @@ assert "activeRequirementFor" in piggy
 assert "itemLockedByOtherRequirement" in piggy
 assert "houseObjectiveUnlocked" in piggy
 assert "gearEventParts" in piggy
+assert "houseGearObserved" in piggy
+assert 'if whiteKey and isWorldItem(whiteKey) then' not in piggy
 assert 'item:FindFirstChild("ToolRequired", true)' in piggy
 
 intercity = texts["games/piggy-intercity/script.lua"]
