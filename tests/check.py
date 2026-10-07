@@ -270,9 +270,11 @@ assert "nearEscapeTrigger" in piggy
 assert "isEscapeRelatedPart" in piggy
 assert 'setCharacterTouch(false)' in piggy
 assert 'PreObjectives = {"RedGear", "GreenGear"}' not in piggy
+assert 'WhiteKey = {"RedGear", "GreenGear"}' not in piggy
 assert 'White Key spawned: collecting' not in piggy
 assert "activeRequirementFor" in piggy
 assert "itemLockedByOtherRequirement" in piggy
+assert "houseObjectiveUnlocked" in piggy
 assert "gearEventParts" in piggy
 
 intercity = texts["games/piggy-intercity/script.lua"]
