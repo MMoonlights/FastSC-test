@@ -79,7 +79,7 @@ for token in [
     '"TP Handler"',
     "game.GameId",
     "ClearTabs",
-    "Return to choose game",
+    "Choose game",
     "CreateKeybind",
     "Menu:GetThemes",
     "DetectMethod",
