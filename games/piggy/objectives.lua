@@ -180,44 +180,45 @@ function Synth.gearEventParts(id)
     local result = {}
     local seen = {}
 
-    local function add(part, rank, source)
+    local function add(part, rank, source, exactForId)
         if not part or not part:IsA("BasePart") or not part.Parent or seen[part] then return end
         if belongsToItem(part) or itemObjectFrom(part) then return end
 
-        local exactRequirement = part:FindFirstChild("ToolRequired")
-        local exactForId = exactRequirement
-            and exactRequirement:IsA("StringValue")
-            and idFromText(exactRequirement.Value) == id
-        local eventMesh = requirementEventMesh(part)
+        local text = ancestorText and ancestorText(part, 8) or string.lower(part.Name)
         local hasInteraction = part:FindFirstChildWhichIsA("TouchTransmitter", true)
             or part:FindFirstChildWhichIsA("ClickDetector", true)
             or part:FindFirstChildWhichIsA("ProximityPrompt", true)
 
-        local maxAxis = math.max(part.Size.X, part.Size.Y, part.Size.Z)
-        local volume = part.Size.X * part.Size.Y * part.Size.Z
-        local text = ancestorText and ancestorText(part, 7) or string.lower(part.Name)
-
-        if not exactForId and not eventMesh and maxAxis > 14 then return end
-        if not exactForId and not eventMesh and not hasInteraction then return end
-
-        local finalRank = rank or 1000
         if currentMapName() == "House" then
-            if text:find("shed", 1, true) then finalRank -= 20 end
-            if text:find("gearbox", 1, true) or text:find("gear box", 1, true) then finalRank -= 25 end
-            if text:find("well", 1, true) then finalRank += 25 end
+            if text:find("exit", 1, true)
+                or text:find("front", 1, true)
+                or text:find("keypad", 1, true)
+                or text:find("code", 1, true)
+                or text:find("white lock", 1, true) then
+                if not exactForId then return end
+            end
 
             if houseShedAnchor then
                 local distance = (part.Position - houseShedAnchor).Magnitude
-                if not exactForId and distance > 32 then return end
-                finalRank += math.min(distance, 100) * 0.35
+                if not exactForId and distance > 24 then return end
+                rank += math.min(distance, 60) * 1.2
+            elseif not exactForId then
+                -- Never guess a House gearbox before Blue shed was confirmed.
+                return
             end
         end
 
-        finalRank += math.max(0, maxAxis - 5) * 0.5
-        finalRank += math.max(0, volume - 40) * 0.002
+        if not exactForId and not hasInteraction then return end
+
+        local maxAxis = math.max(part.Size.X, part.Size.Y, part.Size.Z)
+        if not exactForId and maxAxis > 12 then return end
 
         seen[part] = true
-        result[#result + 1] = {Part = part, Rank = finalRank, Source = source or "fallback"}
+        result[#result + 1] = {
+            Part = part,
+            Rank = rank,
+            Source = source,
+        }
     end
 
     for _, object in ipairs(map:GetDescendants()) do
@@ -225,47 +226,37 @@ function Synth.gearEventParts(id)
             and object.Name == "ToolRequired"
             and idFromText(object.Value) == id
             and not belongsToItem(object) then
+
             local parent = object.Parent
             if parent and parent:IsA("BasePart") then
-                add(parent, 0, "ToolRequired parent")
+                add(parent, 0, "ToolRequired parent", true)
             elseif parent then
                 for _, descendant in ipairs(parent:GetDescendants()) do
                     if descendant:IsA("BasePart") then
-                        if requirementEventMesh(descendant) then
-                            add(descendant, 1, "ToolRequired event mesh")
-                        elseif descendant:FindFirstChildWhichIsA("TouchTransmitter", true) then
-                            add(descendant, 2, "ToolRequired touch")
-                        elseif descendant:FindFirstChildWhichIsA("ClickDetector", true)
-                            or descendant:FindFirstChildWhichIsA("ProximityPrompt", true) then
-                            add(descendant, 3, "ToolRequired interaction")
+                        local hasInteraction = descendant:FindFirstChildWhichIsA("TouchTransmitter", true)
+                            or descendant:FindFirstChildWhichIsA("ClickDetector", true)
+                            or descendant:FindFirstChildWhichIsA("ProximityPrompt", true)
+                        if hasInteraction then
+                            add(descendant, 1, "ToolRequired interaction", true)
                         end
                     end
                 end
-                add(getPart(parent), 4, "ToolRequired host")
+                add(getPart(parent), 2, "ToolRequired host", true)
             end
         end
     end
 
-    if #result == 0 then
-        for _, object in ipairs(map:GetDescendants()) do
-            if object:IsA("BasePart") and requirementEventMesh(object) then
-                add(object, 20, "gear event mesh")
-            end
-        end
-    end
-
-    if #result == 0 then
-        for _, object in ipairs(map:GetDescendants()) do
-            if object:IsA("BasePart") then
-                local text = ancestorText and ancestorText(object, 6) or string.lower(object.Name)
-                if text:find("gear", 1, true)
-                    or text:find("well", 1, true)
-                    or text:find("generator", 1, true) then
-                    if object:FindFirstChildWhichIsA("TouchTransmitter", true)
-                        or object:FindFirstChildWhichIsA("ClickDetector", true)
-                        or object:FindFirstChildWhichIsA("ProximityPrompt", true) then
-                        add(object, 50, "named interaction")
-                    end
+    if currentMapName() == "House" and houseShedAnchor then
+        for _, part in ipairs(map:GetDescendants()) do
+            if part:IsA("BasePart") then
+                local text = ancestorText and ancestorText(part, 8) or string.lower(part.Name)
+                local distance = (part.Position - houseShedAnchor).Magnitude
+                if distance <= 24
+                    and (text:find("gear", 1, true)
+                        or text:find("box", 1, true)
+                        or text:find("machine", 1, true)
+                        or text:find("shed", 1, true)) then
+                    add(part, 20, "shed gearbox", false)
                 end
             end
         end
@@ -273,15 +264,11 @@ function Synth.gearEventParts(id)
 
     table.sort(result, function(a, b)
         if a.Rank ~= b.Rank then return a.Rank < b.Rank end
-        local av = a.Part.Size.X * a.Part.Size.Y * a.Part.Size.Z
-        local bv = b.Part.Size.X * b.Part.Size.Y * b.Part.Size.Z
-        if math.abs(av - bv) > 0.001 then return av < bv end
         return tostring(a.Part:GetFullName()) < tostring(b.Part:GetFullName())
     end)
 
     return result
 end
-
 function Synth.syntheticUsePart(id, target)
     local candidates = Synth.gearEventParts(id)
     return candidates[1] and candidates[1].Part or (target and getPart(target) or nil)
@@ -376,21 +363,19 @@ function Solver.observeHouseProgress()
         local active = activeRequirementFor and activeRequirementFor(id) or nil
         if active then
             houseObservedRequirements[id] = true
-            if Synth.isGearId(id) then
-                syntheticCompleted[id] = nil
-            end
-        elseif houseObservedRequirements[id] then
-            houseProgress[id] = true
-            if Synth.isGearId(id) then
-                syntheticCompleted[id] = true
-            end
         end
     end
 
+    -- These inferences are safe because the next item is physically behind
+    -- the previous lock in House. Do not infer BlueKey completion from merely
+    -- owning BlueKey: the shed still has to be opened with it.
     if findOwnedById then
         if findOwnedById("RedKey") then houseProgress.GreenKey = true end
         if findOwnedById("BlueKey") then houseProgress.RedKey = true end
         if findOwnedById("KeyCode") then houseProgress.YellowKey = true end
+
+        -- An actually owned WhiteKey Tool is authoritative. A world model is
+        -- not: the well can contain the key before it is reachable.
         if findOwnedById("WhiteKey") then
             houseProgress.RedGear = true
             houseProgress.GreenGear = true
@@ -399,7 +384,6 @@ function Solver.observeHouseProgress()
         end
     end
 end
-
 function Synth.reconcileSyntheticState()
     Solver.observeHouseProgress()
 end
@@ -445,7 +429,7 @@ function Solver.houseObjectiveUnlocked(id)
 end
 
 function Solver.markHouseObjective(objective, completed, toolConsumed, targetChanged)
-    if currentMapName() ~= "House" or not objective then return end
+    if currentMapName() ~= "House" or not objective then return false end
 
     local id = objective.Id
     local stage = id == "GreenKey"
@@ -457,7 +441,20 @@ function Solver.markHouseObjective(objective, completed, toolConsumed, targetCha
         or id == "RedGear"
         or id == "GreenGear"
 
-    if not stage or not (completed or toolConsumed or targetChanged) then return end
+    if not stage then return false end
+
+    local confirmed = false
+    if id == "RedGear" or id == "GreenGear" then
+        confirmed = completed == true or toolConsumed == true
+    elseif objective.Requirement then
+        confirmed = not Solver.objectiveStillActive(objective) or toolConsumed == true
+    elseif objective.HouseFallback then
+        confirmed = toolConsumed == true or targetChanged == true
+    else
+        confirmed = completed == true and toolConsumed == true
+    end
+
+    if not confirmed then return false end
 
     houseProgress[id] = true
     houseObservedRequirements[id] = true
@@ -472,8 +469,9 @@ function Solver.markHouseObjective(objective, completed, toolConsumed, targetCha
             houseShedAnchor = anchorPart.Position
         end
     end
-end
 
+    return true
+end
 houseFallbackSpecs = {
     GreenKey = {Color = "Green", Words = {"door", "lock"}},
     RedKey = {Color = "Red", Words = {"door", "lock"}},
@@ -500,49 +498,73 @@ function Solver.houseFallbackTarget(id)
             and not belongsToItem(part)
             and not itemObjectFrom(part) then
 
-            local score = 0
             local text = ancestorText and ancestorText(part, 7) or string.lower(part.Name)
             local required = part:FindFirstChild("ToolRequired", true)
+            local exactRequirement = required
+                and required:IsA("StringValue")
+                and idFromText(required.Value) == id
             local hasInteraction = part:FindFirstChildWhichIsA("TouchTransmitter", true)
                 or part:FindFirstChildWhichIsA("ClickDetector", true)
                 or part:FindFirstChildWhichIsA("ProximityPrompt", true)
+            local color = brickColors[part.BrickColor.Name]
 
-            if required and required:IsA("StringValue") and idFromText(required.Value) == id then
-                score += 1500
+            local isDoorish = text:find("door", 1, true)
+                or text:find("lock", 1, true)
+                or text:find("gate", 1, true)
+            local isShed = text:find("shed", 1, true) ~= nil
+            local isSafe = text:find("safe", 1, true) ~= nil
+            local isExit = text:find("exit", 1, true)
+                or text:find("front", 1, true)
+            local isKeypad = text:find("keypad", 1, true)
+                or text:find("code", 1, true)
+                or text:find("number", 1, true)
+
+            local eligible = exactRequirement
+            if id == "BlueKey" then
+                eligible = eligible or isShed or (color == "Blue" and isDoorish)
+                if not exactRequirement and (isExit or isKeypad) and not isShed then eligible = false end
+            elseif id == "GreenKey" then
+                eligible = eligible or (color == "Green" and isDoorish)
+                if not exactRequirement and (isExit or isKeypad) then eligible = false end
+            elseif id == "RedKey" then
+                eligible = eligible or (color == "Red" and isDoorish)
+                if not exactRequirement and (isExit or isKeypad) then eligible = false end
+            elseif id == "YellowKey" then
+                eligible = eligible or (color == "Yellow" and isSafe)
+            elseif id == "WhiteKey" then
+                eligible = eligible or (color == "White" and (isExit or isDoorish))
+            elseif id == "KeyCode" then
+                eligible = eligible or isKeypad
             end
 
-            if hasInteraction then score += 220 end
+            if eligible then
+                local score = 0
+                if exactRequirement then score += 2500 end
+                if hasInteraction then score += 260 end
+                if color == spec.Color then score += 360 end
+                if isDoorish then score += 120 end
+                if isShed then score += id == "BlueKey" and 1200 or 120 end
+                if isSafe then score += id == "YellowKey" and 900 or 80 end
+                if isExit then score += id == "WhiteKey" and 900 or -500 end
+                if isKeypad then score += id == "KeyCode" and 1000 or -600 end
 
-            if spec.Color and brickColors[part.BrickColor.Name] == spec.Color then
-                score += 260
-            end
+                local maxAxis = math.max(part.Size.X, part.Size.Y, part.Size.Z)
+                local volume = part.Size.X * part.Size.Y * part.Size.Z
+                score -= math.max(0, maxAxis - 7) * 25
+                score -= math.max(0, volume - 80) * 0.1
 
-            for _, word in ipairs(spec.Words or {}) do
-                if text:find(word, 1, true) then score += 90 end
-            end
-
-            if id == "BlueKey" and text:find("shed", 1, true) then score += 700 end
-            if id == "YellowKey" and text:find("safe", 1, true) then score += 500 end
-            if id == "WhiteKey" and (text:find("exit", 1, true) or text:find("front", 1, true)) then score += 500 end
-            if id == "KeyCode" and text:find("keypad", 1, true) then score += 600 end
-
-            local maxAxis = math.max(part.Size.X, part.Size.Y, part.Size.Z)
-            local volume = part.Size.X * part.Size.Y * part.Size.Z
-            score -= math.max(0, maxAxis - 7) * 20
-            score -= math.max(0, volume - 80) * 0.08
-
-            local fullName = tostring(part:GetFullName())
-            if score > bestScore or (score == bestScore and (not bestName or fullName < bestName)) then
-                best = part
-                bestScore = score
-                bestName = fullName
+                local fullName = tostring(part:GetFullName())
+                if score > bestScore or (score == bestScore and (not bestName or fullName < bestName)) then
+                    best = part
+                    bestScore = score
+                    bestName = fullName
+                end
             end
         end
     end
 
-    if bestScore >= 220 then return best end
+    if bestScore >= 300 then return best end
 end
-
 function Solver.addHouseFallbackObjectives(result, seen)
     if currentMapName() ~= "House" then return end
 
@@ -1165,10 +1187,12 @@ function Solver.activateHouseFallback(objective)
         end
 
         if consumed or changed then
-            Solver.markHouseObjective(objective, true, consumed, changed)
-            lastPickupStatus = "House stage completed: " .. tostring(objective.Id)
-            endAutomationMove()
-            return true, true
+            local confirmed = Solver.markHouseObjective(objective, true, consumed, changed)
+            if confirmed then
+                lastPickupStatus = "House stage completed: " .. tostring(objective.Id)
+                endAutomationMove()
+                return true, true
+            end
         end
     end
 
