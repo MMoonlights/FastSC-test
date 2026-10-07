@@ -519,6 +519,8 @@ function Solver.chooseObjective(objectives)
             score = Solver.profilePriority(objective.Id)
         elseif worldItem then
             score = 200 + Solver.profilePriority(objective.Id) + (worldDistance or 0) * 0.01
+        elseif objective.Synthetic then
+            score = 900000 + Solver.profilePriority(objective.Id)
         else
             score = 100000
             if root and objective.Part then
@@ -1304,6 +1306,13 @@ function Round.autoCompleteStep()
         end
 
         if not objective then return end
+
+        if objective.Synthetic and Synth.isGearId(objective.Id)
+            and not activeRequirementFor(objective.Id)
+            and not findOwnedById(objective.Id)
+            and not findItemById(objective.Id) then
+            return
+        end
 
         local retryAt = pickupRetryAt[objective.Id]
         if retryAt and retryAt > os.clock() and not findOwnedById(objective.Id) then
