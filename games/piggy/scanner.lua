@@ -481,6 +481,16 @@ end
 
 function indexItem(item)
     if not item or not item.Parent or not isWorldItem(item) then return end
+
+    -- A lock/event can contain meshes and interaction scripts that resemble a
+    -- pickup. If it also owns ToolRequired, it is an objective host, not loot.
+    if item:FindFirstChild("ToolRequired", true)
+        or item:FindFirstChild("RequiredTool", true)
+        or item:FindFirstChild("Requirement", true) then
+        unindexItem(item)
+        return
+    end
+
     removeIndexedBucket(item)
     itemNameCache[item] = nil
     items[item] = true
